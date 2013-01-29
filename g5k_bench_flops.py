@@ -56,7 +56,6 @@ class g5k_bench_flops(execo_engine.Engine):
             execo_engine.logger.info(str(self.sweeper))
             for site in sites_threads:
                 num_workers = len([w for w in sites_threads[site] if w.is_alive()])
-                # souci si pas de connect vers frontale ou erreur quelconque
                 try:
                     num_waiting = int(execo.SshProcess("oarstat -u $USER | grep $USER | awk '{print $(NF-1)}' | grep W | wc -l",
                                                        host = site,
@@ -92,7 +91,6 @@ class g5k_bench_flops(execo_engine.Engine):
         def update_nodes(action):
             good_nodes = [ process.host() for process in action.processes() if process.finished_ok() ]
             num_lost_nodes = len(action.processes()) - len(good_nodes)
-            #worker_log("nodes = %s" % (good_nodes,))
             if num_lost_nodes > 0:
                 worker_log("lost %i nodes" % num_lost_nodes)
             return good_nodes
