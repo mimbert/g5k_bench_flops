@@ -1,0 +1,48 @@
+#!/bin/bash
+
+set -e # any error will stop everyting
+
+usage() {
+    echo "usage: `basename $0` <source_archive> <extract_directory> <compiled_archive>"
+}
+
+myecho() {
+    echo "### "$(date "+%Y-%m-%d %H:%M:%S")" ### ${@}"
+}
+
+myecho "`basename $0` start. args = $@"
+myecho "on `uname -a`"
+
+WORKDIR=$(cd `dirname $0`; pwd)
+if [ "$#" != 3 ] ; then
+    usage
+    exit 1
+fi
+
+SOURCEARCHIVE=$1
+EXTRACTDIR=$2
+COMPILEDARCHIVE=$3
+
+myecho "clean openmpi install dir"
+rm -rf $WORKDIR/openmpi-install/
+myecho "clean openmpi source dir"
+rm -rf "$WORKDIR/$EXTRACTDIR"
+myecho "extract openmpi"
+cd "$WORKDIR"
+tar xjf "$SOURCEARCHIVE"
+
+myecho "configure openmpi"
+cd "$WORKDIR/$EXTRACTDIR"
+./configure --prefix=$WORKDIR/openmpi-install --enable-branch-probabilities --with-memory-manager=none
+myecho "make openmpi"
+make
+
+myecho "install openmpi"
+make install
+
+# create targz of atlas installation
+myecho "package openmpi install"
+cd $WORKDIR
+tar czf $COMPILEDARCHIVE openmpi-install/
+
+myecho "finished"

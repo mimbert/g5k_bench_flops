@@ -1,0 +1,63 @@
+#!/bin/bash
+
+set -e # any error will stop everyting
+
+usage() {
+    echo "usage: `basename $0` <source_archive> <extract_directory> <compiled_archive>"
+}
+
+myecho() {
+    echo "### "$(date "+%Y-%m-%d %H:%M:%S")" ### ${@}"
+}
+
+myecho "`basename $0` start. args = $@"
+myecho "on `uname -a`"
+
+WORKDIR=$(cd `dirname $0`; pwd)
+if [ "$#" != 3 ] ; then
+    usage
+    exit 1
+fi
+
+SOURCEARCHIVE=$1
+EXTRACTDIR=$2
+COMPILEDARCHIVE=$3
+
+myecho "ensure no cpu throttling"
+for cpu in /sys/devices/system/cpu/cpu* ; do
+    if [ -f "$cpu/cpufreq/scaling_governor" ] ; then
+        myecho "  cpu: $cpu"
+        if [ `cat "$cpu/cpufreq/scaling_governor"` != "performance" ] ; then
+            echo "$cpu/cpufreq/scaling_governor = "`cat $cpu/cpufreq/scaling_governor` >&2
+            exit 1
+        fi
+    fi
+done
+
+myecho "clean atlas install dir"
+rm -rf $WORKDIR/atlas-install/
+myecho "clean atlas source dir"
+rm -rf "$WORKDIR/$EXTRACTDIR"
+myecho "extract atlas"
+cd "$WORKDIR"
+tar xjf "$SOURCEARCHIVE"
+
+myecho "create atlas build dir"
+cd "$WORKDIR/$EXTRACTDIR"
+mkdir build
+cd build
+myecho "configure atlas"
+POINTER_BITWIDTH=`getconf LONG_BIT`
+../configure --prefix=$WORKDIR/atlas-install --nof77 -b "$POINTER_BITWIDTH"
+myecho "make atlas"
+make
+
+myecho "install atlas"
+make install
+
+# create targz of atlas installation
+myecho "package atlas install"
+cd $WORKDIR
+tar czf $COMPILEDARCHIVE atlas-install/
+
+myecho "finished"

@@ -1,0 +1,59 @@
+#!/bin/bash
+
+set -e # any error will stop everyting
+
+usage() {
+    echo "usage: `basename $0` <blas_type> <num_cores> <hpl_extract_directory> [precompiled packages to install before]"
+}
+
+myecho() {
+    echo "### "$(date "+%Y-%m-%d %H:%M:%S")" ### ${@}"
+}
+
+myecho "`basename $0` start. args = $@"
+myecho "on `uname -a`"
+
+WORKDIR=$(cd `dirname $0`; pwd)
+if [ "$#" -lt "3" ] ; then
+    usage
+    exit 1
+fi
+MODE=$1
+case "$MODE" in
+    "atlas") ;;
+    *) usage ; exit 1 ;;
+esac
+NUM_CORES=$2
+HPL_EXTRACTDIR=$3
+shift 3
+PACKAGES="$@"
+
+# ensure no cpu throttling
+myecho "ensure no cpu throttling"
+for cpu in /sys/devices/system/cpu/cpu* ; do
+    if [ -f "$cpu/cpufreq/scaling_governor" ] ; then
+        myecho "  cpu: $cpu"
+        if [ `cat "$cpu/cpufreq/scaling_governor"` != "performance" ] ; then
+            echo "$cpu/cpufreq/scaling_governor = "`cat $cpu/cpufreq/scaling_governor` >&2
+            exit 1
+        fi
+    fi
+done
+
+cd $WORKDIR
+myecho "extract packages"
+for PACKAGE in $PACKAGES ; do
+    myecho "  $PACKAGE"
+    tar xzf $PACKAGE
+done
+
+# prepare hpl bench configuration
+myecho "prepare hpl configuration"
+mv "$WORKDIR/$HPL_EXTRACTDIR/bin/Linux_PII_CBLAS/HPL.dat" "$WORKDIR/$HPL_EXTRACTDIR/bin/Linux_PII_CBLAS/HPL.dat.bak"
+cp "$WORKDIR/HPL.dat" "$WORKDIR/$HPL_EXTRACTDIR/bin/Linux_PII_CBLAS/HPL.dat"
+
+# run hpl bench (results go in HPL.out)
+myecho "run hpl"
+cd "$WORKDIR/$HPL_EXTRACTDIR/bin/Linux_PII_CBLAS/"
+$WORKDIR/openmpi-install/bin/mpirun --mca plm_rsh_agent "oarsh" --mca btl self,sm,tcp --mca btl_tcp_if_exclude ib0,lo,myri0 -np "$NUM_CORES" xhpl
+myecho "hpl bench finished"

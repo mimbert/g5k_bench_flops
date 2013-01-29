@@ -1,0 +1,87 @@
+#!/bin/bash
+
+set -e # any error will stop everyting
+
+usage() {
+    echo "usage: `basename $0` <source_archive> <extract_directory> <compiled_archive> [dependencies]"
+}
+
+myecho() {
+    echo "### "$(date "+%Y-%m-%d %H:%M:%S")" ### ${@}"
+}
+
+myecho "`basename $0` start. args = $@"
+myecho "on `uname -a`"
+
+WORKDIR=$(cd `dirname $0`; pwd)
+if [ "$#" -lt "3" ] ; then
+    usage
+    exit 1
+fi
+
+SOURCEARCHIVE=$1
+EXTRACTDIR=$2
+COMPILEDARCHIVE=$3
+shift 3
+DEPS="$@"
+
+myecho "preparing dependencies"
+cd $WORKDIR
+for DEP in $DEPS ; do
+    myecho "  $DEP"
+    tar xzf $DEP
+done
+myecho "clean hpl install dir"
+rm -rf $WORKDIR/hpl-install/
+myecho "clean hpl source dir"
+rm -rf "$WORKDIR/$EXTRACTDIR"
+myecho "extract hpl"
+cd "$WORKDIR"
+tar xzf "$SOURCEARCHIVE"
+
+myecho "configure hpl"
+cd "$WORKDIR/$EXTRACTDIR"
+cp setup/Make.Linux_PII_CBLAS .
+cat <<EOF | patch Make.Linux_PII_CBLAS
+70c70
+< TOPdir       = \$(HOME)/hpl
+---
+> TOPdir       = $WORKDIR/$EXTRACTDIR
+84c84
+< MPdir        = /usr/local/mpi
+---
+> MPdir        = $WORKDIR/openmpi-install
+86c86
+< MPlib        = \$(MPdir)/lib/libmpich.a
+---
+> MPlib        =
+95,97c95,97
+< LAdir        = \$(HOME)/netlib/ARCHIVES/Linux_PII
+< LAinc        =
+< LAlib        = \$(LAdir)/libcblas.a \$(LAdir)/libatlas.a
+---
+> LAdir        = $WORKDIR/atlas-install
+> LAinc        = -I\$(LAdir)/include
+> LAlib        = \$(LAdir)/lib/libcblas.a \$(LAdir)/lib/libatlas.a
+169c169
+< CC           = /usr/bin/gcc
+---
+> CC           = \$(MPdir)/bin/mpicc
+176c176
+< LINKER       = /usr/bin/g77
+---
+> LINKER       = \$(MPdir)/bin/mpicc
+EOF
+
+myecho "make hpl"
+make arch=Linux_PII_CBLAS
+
+# myecho "install hpl"
+# make install
+
+# create targz of atlas installation
+myecho "package built hpl"
+cd $WORKDIR
+tar czf $COMPILEDARCHIVE $EXTRACTDIR/
+
+myecho "finished"

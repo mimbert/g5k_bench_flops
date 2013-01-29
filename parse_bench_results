@@ -1,0 +1,64 @@
+#!/usr/bin/env python
+
+import optparse, fileinput, re, numpy, os.path
+from common import *
+
+if __name__ == "__main__":
+
+    parser = optparse.OptionParser(usage = "usage: %prog <space separated list of result directories>\n")
+    # parser.add_option("-d", dest = "details", help = "display details: per-node results", action = "store_true", default = False)
+    (options, args) = parser.parse_args()
+    resultdirs = set([arg.rstrip("/") for arg in args])
+    # gflops_max = []
+    # gflops_min = []
+    # gflops_mean = []
+    # gflops_median = []
+    # gflops_std = []
+    cluster_results = dict()
+    cluster_name_re = re.compile("^(\w+)-\d+")
+    resultfiles = find_files(resultdirs, "-name", "HPL.out")
+    for resultfile in resultfiles:
+        _, _, filedir = os.path.dirname(resultfile).rpartition("/")
+        mo = cluster_name_re.match(filedir)
+        if mo:
+            cluster = mo.group(1)
+            if not cluster_results.has_key(cluster):
+                cluster_results[cluster] = []
+            gflops = []
+            for line in fileinput.input(resultfile):
+                mo = re.search("^\w+\s+\d+\s+\d+\s+\d+\s+\d+\s+[0-9.]+\s+([0-9.e+-]+)$", line)
+                if mo:
+                    cluster_results[cluster].append(float(mo.group(1)))
+
+    for cluster in cluster_results:
+        print "cluster %s - flops max = %f" % (cluster, numpy.amax(cluster_results[cluster]))
+            
+    
+    # for resultdir in resultdirs:
+    #     for (dirpath, dirnames, filenames) in os.walk(workdir):
+    #         for filename in filenames:
+    #             if filename == "HPL.out":
+    #                 gflops = []
+    #                 fullname = os.path.join(dirpath, filename)
+    #                 for line in fileinput.input(fullname):
+    #                     mo = re.search("^\w+\s+\d+\s+\d+\s+\d+\s+\d+\s+[0-9.]+\s+([0-9.e+-]+)$", line)
+    #                     if mo:
+    #                         gflops.append(float(mo.group(1)))
+    #                 if len(gflops) > 0:
+    #                     gflops_max.append(numpy.amax(gflops))
+    #                     gflops_min.append(numpy.amin(gflops))
+    #                     gflops_mean.append(numpy.mean(gflops))
+    #                     gflops_median.append(numpy.median(gflops))
+    #                     gflops_std.append(numpy.std(gflops))
+    #                     if options.details:
+    #                         (tmp_prefix, tmp_sep, tmp_path) = dirpath.partition("/")
+    #                         print "  %s: gflops max = %f" % (tmp_path, numpy.amax(gflops))
+    #     print "gflops max in dir %s: %i bench" % (workdir, len(gflops_max))
+    #     if len(gflops_max) > 0:
+    #         print "  min    = %f" % numpy.amin(gflops_max)
+    #         print "  max    = %f" % numpy.amax(gflops_max)
+    #         print "  mean   = %f" % numpy.mean(gflops_max)
+    #         print "  median = %f" % numpy.median(gflops_max)
+    #         print "  std    = %f" % numpy.std(gflops_max)
+    #     else:
+    #         print("  error: unable to measure gflops")
