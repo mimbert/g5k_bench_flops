@@ -8,7 +8,7 @@ installation:
 
 - clone the repo
 
-- add to the repo root dir the following files:
+- add to the root dir the following files, I prefer not putting them on the repo because these are distribution packages and because of possible licensing issues (i did not check):
 
   - atlas3.10.0.tar.bz2 (download from http://sourceforge.net/projects/math-atlas/files/)
 
