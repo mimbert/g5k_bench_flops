@@ -111,7 +111,7 @@ class g5k_bench_flops(execo_engine.Engine):
                 ((jobid, _),) = execo_g5k.oarsub([(submission, site)])
                 if not jobid:
                     worker_log("aborting, job submission failed")
-                    self.sweeper.skip(comb)
+                    self.sweeper.cancel(comb)
                     return
                 worker_log("job submitted")
                 execo_g5k.wait_oar_job_start(jobid, site, prediction_callback = lambda ts: worker_log("job start prediction: %s" % (execo.format_date(ts),)))
@@ -182,7 +182,7 @@ HPL.out      output file name (if any)
                 if not preparation.ok():
                     if preparation.stats()['num_ok'] < comb['num_nodes']:
                         worker_log("aborting, copy of files failed on too much nodes:\n" + execo.Report([preparation]).to_string())
-                        self.sweeper.skip(comb)
+                        self.sweeper.cancel(comb)
                         return
                 nodes = update_nodes(preparation)
                 # run bench
@@ -208,7 +208,7 @@ HPL.out      output file name (if any)
                     if bench.stats()['num_ok'] < comb['num_nodes']:
                         failed = True
                         worker_log("bench failed on too much nodes:\n" + execo.Report([bench]).to_string())
-                        self.sweeper.skip(comb)
+                        self.sweeper.cancel(comb)
                 # retrieve stdout from all node
                 worker_log("retrieve logs in %s" % (comb_dir,))
                 retrieval1 = execo.Get(
@@ -247,7 +247,7 @@ HPL.out      output file name (if any)
                     if retrieval2.stats()['num_ok'] < comb['num_nodes']:
                         [ os.unlink(p) for p in find_files(comb_dir, "-name", "HPL.out") ]
                         worker_log("aborting, results retrieval failed on too much nodes:\n" + execo.Report([retrieval2]).to_string())
-                        self.sweeper.skip(comb)
+                        self.sweeper.cancel(comb)
                         return
                 worker_log("finished combination %s" % (comb,))
                 self.sweeper.done(comb)
