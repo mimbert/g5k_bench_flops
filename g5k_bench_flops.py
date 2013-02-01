@@ -15,6 +15,7 @@ class g5k_bench_flops(execo_engine.Engine):
         self.options_parser.add_option("-r", dest = "max_workers", help = "maximum number of concurrent worker jobs per site", type = "int", default = 30)
         self.options_parser.add_option("-t", dest = "max_waiting", help = "maximum number of concurrent waiting jobs per site", type = "int", default = 5)
         self.options_parser.add_option("-s", dest = "schedule_delay", help = "delay between rescheduling worker jobs", type = "int", default = 30)
+        self.options_parser.add_option("-n", dest = "num_replicas", help = "num xp replicas: how many repetition of bench runs", type ="int", default = 1)
         self.options_parser.add_argument("clusters", "comma separated list of clusters")
         self.prepare_path = pjoin(self.engine_dir, "preparation")
 
@@ -35,6 +36,7 @@ class g5k_bench_flops(execo_engine.Engine):
             "blas": ["atlas"],
             "num_nodes": [1],
             "xhpl_nb": [ 64, 128, 256, 512 ],
+            "repl": range(0, self.options.num_replicas)
             }
         for (cluster, site) in clusters:
             attrs = execo_g5k.get_host_attributes(cluster + "-1")
