@@ -1,8 +1,14 @@
-import sys, os, shutil, time, math, threading
+import sys, os, shutil, time, math, threading, time
 import execo, execo_g5k, execo_engine
 from os.path import join as pjoin
 import pprint
 from common import *
+
+def g5k_charter_time(t):
+    l = time.localtime(t)
+    if l.tm_wday in [5, 6]: return False # week-end
+    if l.tm_hour < 9 or l.tm_hour > 19: return False # nuit
+    return True
 
 class g5k_bench_flops(execo_engine.Engine):
 
@@ -108,6 +114,8 @@ class g5k_bench_flops(execo_engine.Engine):
                                                      walltime = self.options.walltime,
                                                      name = "flopsworker",
                                                      additional_options = self.options.oar_options)
+                if g5k_charter_time(time.time()):
+                    submission.job_type = "besteffort"
                 ((jobid, _),) = execo_g5k.oarsub([(submission, site)])
                 if not jobid:
                     worker_log("aborting, job submission failed")
