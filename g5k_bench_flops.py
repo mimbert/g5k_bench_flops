@@ -176,7 +176,7 @@ HPL.out      output file name (if any)
                                      pjoin(comb_dir, "HPL.dat") ]),
                     remote_location = node_working_dir,
                     create_dirs = True,
-                    connexion_params = oarsh_connexion_params,
+                    connexion_params = execo_g5k.default_oarsh_oarcp_params,
                     name = "copy files")
                 preparation.run()
                 if not preparation.ok():
@@ -196,7 +196,7 @@ HPL.out      output file name (if any)
                         " ".join([ prepared_archive(package, comb["cluster"][0])
                                    for package in [ "atlas", "openmpi", "hpl" ] ])),
                     nodes,
-                    connexion_params = oarsh_connexion_params,
+                    connexion_params = execo_g5k.default_oarsh_oarcp_params,
                     name = "bench nb=%i p*q=%i*%i %s" % (
                         comb["xhpl_nb"],
                         comb["xhpl_grid"][0],
@@ -218,7 +218,7 @@ HPL.out      output file name (if any)
                         "%s/stdout" % node_working_dir],
                     local_location = pjoin(comb_dir, "{{{host}}}"),
                     create_dirs = True,
-                    connexion_params = oarsh_connexion_params,
+                    connexion_params = execo_g5k.default_oarsh_oarcp_params,
                     name = "get logs nb=%i p*q=%i*%i %s" % (
                         comb["xhpl_nb"],
                         comb["xhpl_grid"][0],
@@ -236,7 +236,7 @@ HPL.out      output file name (if any)
                     remote_files = [ "%s/%s/bin/Linux_PII_CBLAS/HPL.out" % (node_working_dir, packages["hpl"]["extract_dir"]) ],
                     local_location = pjoin(comb_dir, "{{{host}}}"),
                     create_dirs = True,
-                    connexion_params = oarsh_connexion_params,
+                    connexion_params = execo_g5k.default_oarsh_oarcp_params,
                     name = "get results nb=%i p*q=%i*%i %s" % (
                         comb["xhpl_nb"],
                         comb["xhpl_grid"][0],

@@ -80,7 +80,7 @@ class g5k_prepare_bench_flops(execo_engine.Engine):
                                                        [ pjoin(self.prepare_path, prepared_archive(dep, cluster)) for dep in packages[package]["deps"] ]),
                                         remote_location = node_working_dir,
                                         create_dirs = True,
-                                        connexion_params = oarsh_connexion_params,
+                                        connexion_params = execo_g5k.default_oarsh_oarcp_params,
                                         name = "copy files")
                 preparation.run()
                 if not preparation.ok():
@@ -98,7 +98,7 @@ class g5k_prepare_bench_flops(execo_engine.Engine):
                                                                           node_working_dir,
                                                                           prepared_archive(package, cluster)),
                     nodes,
-                    connexion_params = oarsh_connexion_params,
+                    connexion_params = execo_g5k.default_oarsh_oarcp_params,
                     name = "compilation")
                 compil.run()
                 if not compil.ok():
@@ -111,7 +111,7 @@ class g5k_prepare_bench_flops(execo_engine.Engine):
                     nodes,
                     remote_files = remote_files,
                     local_location = self.prepare_path,
-                    connexion_params = oarsh_connexion_params,
+                    connexion_params = execo_g5k.default_oarsh_oarcp_params,
                     name = "get built package")
                 retrieval.run()
                 if not retrieval.ok():

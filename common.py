@@ -21,13 +21,6 @@ packages = {
         }
     }
 
-oarsh_connexion_params = {
-    "user": "oar",
-    "keyfile": "/home/mimbert/.ssh/oar_key",
-    "port": 6667,
-    "pty": True
-    }
-
 node_working_dir = "/tmp/benchflops"
 preparation_dir = "preparation"
 
