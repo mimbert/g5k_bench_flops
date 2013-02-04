@@ -25,4 +25,4 @@ if __name__ == "__main__":
                     cluster_results[cluster].append(float(mo.group(1)))
 
     for cluster in cluster_results:
-        print "cluster %s - flops max = %f" % (cluster, numpy.amax(cluster_results[cluster]))
+        print "cluster %s - gflops max = %f" % (cluster, numpy.amax(cluster_results[cluster]))
