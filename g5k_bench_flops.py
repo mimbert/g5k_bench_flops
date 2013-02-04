@@ -17,10 +17,10 @@ class g5k_bench_flops(execo_engine.Engine):
         self.options_parser.set_usage("usage: %prog <comma separated list of clusters>")
         self.options_parser.set_description("compile and install openmpi, atlas, xhpl, then run xhpl bench to get max flops for cluster nodes")
         self.options_parser.add_option("-o", dest = "oar_options", help = "oar reservation options", default = None)
-        self.options_parser.add_option("-w", dest = "walltime", help = "walltime of bench jobs", type = "string", default = "2:0:0")
-        self.options_parser.add_option("-r", dest = "max_workers", help = "maximum number of concurrent worker jobs per site", type = "int", default = 30)
-        self.options_parser.add_option("-t", dest = "max_waiting", help = "maximum number of concurrent waiting jobs per site", type = "int", default = 5)
-        self.options_parser.add_option("-s", dest = "schedule_delay", help = "delay between rescheduling worker jobs", type = "int", default = 30)
+        self.options_parser.add_option("-w", dest = "walltime", help = "walltime of bench jobs", type = "string", default = "5:0:0")
+        self.options_parser.add_option("-r", dest = "max_workers", help = "maximum number of concurrent worker jobs per cluster", type = "int", default = 10)
+        self.options_parser.add_option("-t", dest = "max_waiting", help = "maximum number of concurrent waiting jobs per cluster", type = "int", default = 2)
+        self.options_parser.add_option("-s", dest = "schedule_delay", help = "delay between rescheduling worker jobs", type = "int", default = 20)
         self.options_parser.add_option("-n", dest = "num_replicas", help = "num xp replicas: how many repetition of bench runs", type ="int", default = 1)
         self.options_parser.add_argument("clusters", "comma separated list of clusters")
         self.prepare_path = pjoin(self.engine_dir, "preparation")
@@ -30,13 +30,12 @@ class g5k_bench_flops(execo_engine.Engine):
             print "ERROR: wrong number of arguments"
             self.options_parser.print_help(file=sys.stderr)
             exit(1)
-        clusters = list()
-        sites_threads = dict()
+        clusters_threads = dict()
         for cluster in self.args[0].split(","):
-            clusters.append((cluster, execo_g5k.get_cluster_site(cluster)))
-            sites_threads[execo_g5k.get_cluster_site(cluster)] = list()
-        execo_engine.logger.info("clusters = %s" % (clusters,))
-        execo_engine.logger.info("sites = %s" % (sites_threads.keys(),))
+            clusters_threads[(cluster, execo_g5k.get_cluster_site(cluster))] = list()
+        sites = set([s for (c,s) in clusters_threads.keys()])
+        execo_engine.logger.info("clusters = %s" % (clusters_threads.keys(),))
+        execo_engine.logger.info("sites = %s" % (sites,))
         parameters = {
             "cluster": {},
             "blas": ["atlas"],
@@ -44,7 +43,7 @@ class g5k_bench_flops(execo_engine.Engine):
             "xhpl_nb": [ 64, 128, 256, 512 ],
             "repl": range(0, self.options.num_replicas)
             }
-        for (cluster, site) in clusters:
+        for (cluster, site) in clusters_threads.keys():
             attrs = execo_g5k.get_host_attributes(cluster + "-1")
             num_cores = attrs["architecture"]["smp_size"] * attrs["architecture"]["smt_size"]
             free_mem = attrs["main_memory"]["ram_size"] - 300000000
@@ -62,36 +61,36 @@ class g5k_bench_flops(execo_engine.Engine):
         num_total_workers = 0
         while len(self.sweeper.get_remaining()) > 0:
             execo_engine.logger.info(str(self.sweeper))
-            for site in sites_threads:
-                num_workers = len([w for w in sites_threads[site] if w.is_alive()])
+            for cluster, site in clusters_threads.keys():
+                num_workers = len([w for w in clusters_threads[(cluster, site)] if w.is_alive()])
                 try:
-                    num_waiting = int(execo.SshProcess("oarstat -u $USER | grep $USER | awk '{print $(NF-1)}' | grep W | wc -l",
+                    num_waiting = int(execo.SshProcess("for J in $(oarstat -u $USER | grep $USER | awk '{if ($(NF-1) == \"W\") print $1}') ; do echo \"${J} \"$(oarstat -j \"$J\" -f | sed -n 's/.*wanted_resources.*cluster=\"\\(\w*\\)\".*/\\1/p') ; done | wc -l",
                                                        host = site,
                                                        connexion_params = execo_g5k.default_frontend_connexion_params).run().stdout())
                 except:
-                    execo_engine.logger.warn("error getting num waiting jobs on %s - skipping for now" % site)
+                    execo_engine.logger.warn("error getting num waiting jobs for %s@%s - skipping for now" % (cluster, site))
                     continue
                 num_new_workers = min(self.options.max_workers - num_workers,
                                       self.options.max_waiting - num_waiting,
-                                      len([comb for comb in self.sweeper.get_remaining() if comb["cluster"][1] == site ]))
+                                      len([comb for comb in self.sweeper.get_remaining() if comb["cluster"] == (cluster, site) ]))
                 if num_new_workers > 0:
-                    execo_engine.logger.info("rescheduling on site %s: num_workers = %i / num_waiting = %i / num_new_workers = %i" %
-                                             (site, num_workers, num_waiting, num_new_workers))
+                    execo_engine.logger.info("rescheduling on cluster %s@%s: num_workers = %i / num_waiting = %i / num_new_workers = %i" %
+                                             (cluster, site, num_workers, num_waiting, num_new_workers))
                     for worker_index in range(0, num_new_workers):
-                        th = threading.Thread(target = self.worker, args = (site, num_total_workers,), name = "bench flops worker %i - site = %s" % (num_total_workers, site))
+                        th = threading.Thread(target = self.worker, args = (cluster, site, num_total_workers,), name = "bench flops worker %i - cluster = %s@%s" % (num_total_workers, cluster, site))
                         th.start()
                         num_total_workers += 1
-                        sites_threads[site].append(th)
+                        clusters_threads[(cluster, site)].append(th)
             execo.sleep(self.options.schedule_delay)
 
-    def worker(self, site, worker_index):
+    def worker(self, cluster, site, worker_index):
         jobid = None
         comb = None
 
         def worker_log(arg):
             execo_engine.logger.info("worker #%i %s@%s - job %s: %s" % (
                 worker_index,
-                comb["cluster"][0] if comb else None,
+                cluster,
                 site,
                 jobid,
                 arg))
@@ -104,13 +103,13 @@ class g5k_bench_flops(execo_engine.Engine):
             return good_nodes
 
         try:
-            comb = self.sweeper.get_next(filtr = lambda r: filter(lambda comb: comb["cluster"][1] == site, r))
+            comb = self.sweeper.get_next(filtr = lambda r: filter(lambda comb: comb["cluster"] == (cluster, site), r))
             worker_log("new comb: %s" % (comb,))
 
             if comb:
                 # submit job
                 worker_log("submit oar job")
-                submission = execo_g5k.OarSubmission(resources = "{'cluster=\"%s\"'}/nodes=%i" % (comb['cluster'][0], comb['num_nodes']),
+                submission = execo_g5k.OarSubmission(resources = "{'cluster=\"%s\"'}/nodes=%i" % (cluster, comb['num_nodes']),
                                                      walltime = self.options.walltime,
                                                      name = "flopsworker",
                                                      additional_options = self.options.oar_options)
