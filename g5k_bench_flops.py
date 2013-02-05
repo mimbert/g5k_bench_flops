@@ -62,20 +62,31 @@ class g5k_bench_flops(execo_engine.Engine):
         while len(self.sweeper.get_remaining()) > 0:
             execo_engine.logger.info(str(self.sweeper))
             for cluster, site in clusters_threads.keys():
-                num_workers = len([w for w in clusters_threads[(cluster, site)] if w.is_alive()])
-                try:
-                    num_waiting = int(execo.SshProcess("for J in $(oarstat -u $USER | grep $USER | awk '{if ($(NF-1) == \"W\") print $1}') ; do echo \"${J} \"$(oarstat -j \"$J\" -f | sed -n 's/.*wanted_resources.*cluster=\"\\(\w*\\)\".*/\\1/p') ; done | wc -l",
-                                                       host = site,
-                                                       connexion_params = execo_g5k.default_frontend_connexion_params).run().stdout())
-                except:
-                    execo_engine.logger.warn("error getting num waiting jobs for %s@%s - skipping for now" % (cluster, site))
-                    continue
-                num_new_workers = min(self.options.max_workers - num_workers,
-                                      self.options.max_waiting - num_waiting,
-                                      len([comb for comb in self.sweeper.get_remaining() if comb["cluster"] == (cluster, site) ]))
+                execo_engine.logger.info("check job queuing for %s@%s" % (cluster, site))
+                clusters_threads[(cluster, site)] = [w for w in clusters_threads[(cluster, site)] if w.is_alive()]
+                num_workers = len(clusters_threads[(cluster, site)])
+                num_combs_remaining = len([comb for comb in self.sweeper.get_remaining() if comb["cluster"] == (cluster, site) ])
+                if num_combs_remaining > 0:
+                    try:
+                        num_waiting = int(execo.SshProcess("oarstat -f $(for J in $(oarstat -u $USER | grep $USER | awk '{if ($(NF-1) == \"W\") print $1}') ; do echo -n \"-j $J \" ; done) | sed -n 's/.*wanted_resources.*cluster=\"\(\w*\)\".*/\\1/p' | grep %s | wc -l" % (cluster,),
+                                                           host = site,
+                                                           connexion_params = execo_g5k.default_frontend_connexion_params).run().stdout())
+                    except:
+                        execo_engine.logger.warn("error getting num waiting jobs for %s@%s - skipping for now" % (cluster, site))
+                        continue
+                    num_new_workers = min(self.options.max_workers - num_workers,
+                                          self.options.max_waiting - num_waiting,
+                                          num_combs_remaining)
+                else:
+                    num_waiting = None
+                    num_new_workers = 0
+                execo_engine.logger.info("rescheduling on cluster %s@%s: num_workers = %s / num_waiting = %s / num_combs_remaining = %s / num_new_workers = %s" %
+                                         (cluster, site,
+                                          num_workers,
+                                          num_waiting,
+                                          num_combs_remaining,
+                                          num_new_workers))
                 if num_new_workers > 0:
-                    execo_engine.logger.info("rescheduling on cluster %s@%s: num_workers = %i / num_waiting = %i / num_new_workers = %i" %
-                                             (cluster, site, num_workers, num_waiting, num_new_workers))
                     for worker_index in range(0, num_new_workers):
                         th = threading.Thread(target = self.worker, args = (cluster, site, num_total_workers,), name = "bench flops worker %i - cluster = %s@%s" % (num_total_workers, cluster, site))
                         th.start()
