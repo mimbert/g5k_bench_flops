@@ -60,6 +60,7 @@ class g5k_bench_flops(execo_engine.Engine):
         self.sweeper = execo_engine.ParamSweeper(pjoin(self.result_dir, "parameters"), execo_engine.sweep(parameters))
         num_total_workers = 0
         while len(self.sweeper.get_remaining()) > 0:
+            t = execo.Timer()
             execo_engine.logger.info(str(self.sweeper))
             for cluster, site in clusters_threads.keys():
                 execo_engine.logger.info("check job queuing for %s@%s" % (cluster, site))
@@ -93,6 +94,7 @@ class g5k_bench_flops(execo_engine.Engine):
                         num_total_workers += 1
                         clusters_threads[(cluster, site)].append(th)
             execo.sleep(self.options.schedule_delay)
+            execo_engine.logger.info("total time for a schedule loop iteration: %s" % (t.elapsed()))
 
     def worker(self, cluster, site, worker_index):
         jobid = None
