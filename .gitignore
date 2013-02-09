@@ -1,3 +1,7 @@
+atlas*.tar.bz2
+hpl*.tar.gz
+openmpi*.tar.bz2
+
 *.py[cod]
 
 # C extensions
