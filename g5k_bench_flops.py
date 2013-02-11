@@ -63,9 +63,8 @@ class g5k_bench_flops(execo_engine.Engine):
         num_total_workers = 0
         while len(self.sweeper.get_remaining()) > 0:
             t = execo.Timer()
-            execo_engine.logger.info(str(self.sweeper))
+            execo_engine.logger.info("schedule loop start. sweeper: %s" % (self.sweeper,))
             for cluster, site in clusters_threads.keys():
-                execo_engine.logger.info("check job queuing for %s@%s" % (cluster, site))
                 clusters_threads[(cluster, site)] = [w for w in clusters_threads[(cluster, site)] if w.is_alive()]
                 num_workers = len(clusters_threads[(cluster, site)])
                 num_waiting = len([w for w in clusters_threads[(cluster, site)] if w.waiting])
@@ -73,13 +72,13 @@ class g5k_bench_flops(execo_engine.Engine):
                 num_new_workers = min(self.options.max_workers - num_workers,
                                       self.options.max_waiting - num_waiting,
                                       num_combs_remaining)
-                execo_engine.logger.info("rescheduling on cluster %s@%s: num_workers = %s / num_waiting = %s / num_combs_remaining = %s / num_new_workers = %s" %
-                                         (cluster, site,
-                                          num_workers,
-                                          num_waiting,
-                                          num_combs_remaining,
-                                          num_new_workers))
                 if num_new_workers > 0:
+                    execo_engine.logger.info("rescheduling on cluster %s@%s: num_workers = %s / num_waiting = %s / num_combs_remaining = %s / num_new_workers = %s" %
+                                             (cluster, site,
+                                              num_workers,
+                                              num_waiting,
+                                              num_combs_remaining,
+                                              num_new_workers))
                     for worker_index in range(0, num_new_workers):
                         th = threading.Thread(target = self.worker, args = (cluster, site, num_total_workers,), name = "bench flops worker %i - cluster = %s@%s" % (num_total_workers, cluster, site))
                         th.waiting = True
@@ -87,7 +86,7 @@ class g5k_bench_flops(execo_engine.Engine):
                         num_total_workers += 1
                         clusters_threads[(cluster, site)].append(th)
             execo.sleep(self.options.schedule_delay)
-            execo_engine.logger.info("total time for a schedule loop iteration: %s" % (t.elapsed()))
+            execo_engine.logger.info("schedule loop end. took: %ss." % (t.elapsed(),))
 
     def worker(self, cluster, site, worker_index):
         jobid = None
@@ -126,7 +125,7 @@ class g5k_bench_flops(execo_engine.Engine):
                     worker_log("aborting, job submission failed")
                     self.sweeper.cancel(comb)
                     return
-                worker_log("job submitted")
+                worker_log("job submitted - wait job start")
                 execo_g5k.wait_oar_job_start(jobid, site, prediction_callback = lambda ts: worker_log("job start prediction: %s" % (execo.format_date(ts),)))
                 threading.current_thread().waiting = False
                 worker_log("job started - get job nodes")
