@@ -19,8 +19,6 @@ installation:
 running
 -------
 
-- check connection params in oarsh_connexion_params in common.py
-
 - adapt packages dict if needed (if using different versions of atlas, hpl, openmpi) in common.py
 
 - run g5k_prepare_bench_flops to precompile each packages on all clusters (the precompiled packages will be downloaded in directory preparation/)
