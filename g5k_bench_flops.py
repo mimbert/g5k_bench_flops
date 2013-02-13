@@ -120,8 +120,8 @@ class g5k_bench_flops(execo_engine.Engine):
                         th.start()
                         num_total_workers += 1
                         clusters_threads[(cluster, site)].append(th)
-            execo.sleep(self.options.schedule_delay)
             execo_engine.logger.info("schedule loop end. took: %ss." % (t.elapsed(),))
+            execo.sleep(self.options.schedule_delay)
 
     def worker(self, cluster, site, worker_index):
         jobid = None
