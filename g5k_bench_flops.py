@@ -72,13 +72,13 @@ class g5k_bench_flops(execo_engine.Engine):
                 num_new_workers = min(self.options.max_workers - num_workers,
                                       self.options.max_waiting - num_waiting,
                                       num_combs_remaining)
+                execo_engine.logger.info("rescheduling on cluster %s@%s: num_workers = %s / num_waiting = %s / num_combs_remaining = %s / num_new_workers = %s" %
+                                         (cluster, site,
+                                          num_workers,
+                                          num_waiting,
+                                          num_combs_remaining,
+                                          num_new_workers))
                 if num_new_workers > 0:
-                    execo_engine.logger.info("rescheduling on cluster %s@%s: num_workers = %s / num_waiting = %s / num_combs_remaining = %s / num_new_workers = %s" %
-                                             (cluster, site,
-                                              num_workers,
-                                              num_waiting,
-                                              num_combs_remaining,
-                                              num_new_workers))
                     for worker_index in range(0, num_new_workers):
                         th = threading.Thread(target = self.worker, args = (cluster, site, num_total_workers,), name = "bench flops worker %i - cluster = %s@%s" % (num_total_workers, cluster, site))
                         th.waiting = True
