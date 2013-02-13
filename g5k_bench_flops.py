@@ -5,10 +5,27 @@ import pprint
 from common import *
 
 def g5k_charter_time(t):
+    # - param: a unix timestamp
+    # - returns a boolean, True if the given timestamp is in a period
+    #   where the g5k charter needs to be respected, False if it is in
+    #   a period where charter is not applicable (night, weekends)
     l = time.localtime(t)
     if l.tm_wday in [5, 6]: return False # week-end
     if l.tm_hour < 9 or l.tm_hour >= 19: return False # nuit
     return True
+
+def g5k_crossed_charter_boundary(t):
+    # - param: a unix timestamp
+    # - returns True if a g5k charter time boundary has been crossed
+    #   since the last call. returns False if not or if it is the
+    #   first call
+    if g5k_crossed_charter_boundary.previous_t == None:
+        retval = False
+    else:
+        retval = g5k_charter_time(g5k_crossed_charter_boundary.previous_t) != g5k_charter_time(t)
+    g5k_crossed_charter_boundary.previous_t = t
+    return retval
+g5k_crossed_charter_boundary.previous_t = None
 
 class g5k_bench_flops(execo_engine.Engine):
 
@@ -64,6 +81,21 @@ class g5k_bench_flops(execo_engine.Engine):
         while len(self.sweeper.get_remaining()) > 0:
             t = execo.Timer()
             execo_engine.logger.info("schedule loop start. sweeper: %s" % (self.sweeper,))
+            # when passing from non-charter to charter time period, or
+            # the reverse, kill all previously subitted jobs still in
+            # waiting:
+            if g5k_crossed_charter_boundary(time.time()):
+                for cluster, site in clusters_threads.keys():
+                    for w in clusters_threads[(cluster, site)]:
+                        if w.waiting: w.to_delete = True
+            jobs_to_kill = []
+            for cluster, site in clusters_threads.keys():
+                for w in clusters_threads[(cluster, site)]:
+                    if w.waiting and w.to_delete and w.job_id:
+                        jobs_to_kill.append((w.job_id, site))
+            if len(jobs_to_kill) > 0:
+                execo_engine.logger.info("g5k user charter status change, killing %s" % (jobs_to_kill,))
+                execo_g5k.oardel(jobs_to_kill)
             for cluster, site in clusters_threads.keys():
                 clusters_threads[(cluster, site)] = [w for w in clusters_threads[(cluster, site)] if w.is_alive()]
                 num_workers = len(clusters_threads[(cluster, site)])
@@ -82,6 +114,9 @@ class g5k_bench_flops(execo_engine.Engine):
                     for worker_index in range(0, num_new_workers):
                         th = threading.Thread(target = self.worker, args = (cluster, site, num_total_workers,), name = "bench flops worker %i - cluster = %s@%s" % (num_total_workers, cluster, site))
                         th.waiting = True
+                        th.jobid = None
+                        th.to_delete = False
+                        th.site = site
                         th.start()
                         num_total_workers += 1
                         clusters_threads[(cluster, site)].append(th)
@@ -125,6 +160,7 @@ class g5k_bench_flops(execo_engine.Engine):
                     worker_log("aborting, job submission failed")
                     self.sweeper.cancel(comb)
                     return
+                threading.current_thread().jobid = jobid
                 worker_log("job submitted - wait job start")
                 execo_g5k.wait_oar_job_start(jobid, site, prediction_callback = lambda ts: worker_log("job start prediction: %s" % (execo.format_date(ts),)))
                 threading.current_thread().waiting = False
