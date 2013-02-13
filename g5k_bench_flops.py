@@ -91,8 +91,8 @@ class g5k_bench_flops(execo_engine.Engine):
             jobs_to_kill = []
             for cluster, site in clusters_threads.keys():
                 for w in clusters_threads[(cluster, site)]:
-                    if w.waiting and w.to_delete and w.job_id:
-                        jobs_to_kill.append((w.job_id, site))
+                    if w.waiting and w.to_delete and w.jobid:
+                        jobs_to_kill.append((w.jobid, site))
             if len(jobs_to_kill) > 0:
                 execo_engine.logger.info("g5k user charter status change, killing %s" % (jobs_to_kill,))
                 execo_g5k.oardel(jobs_to_kill)
