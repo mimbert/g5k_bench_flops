@@ -66,8 +66,14 @@ class g5k_bench_flops(execo_engine.Engine):
             free_mem = attrs["main_memory"]["ram_size"] - 300000000
             big_size = int(math.sqrt(free_mem/8.0)*0.8)
             parameters["cluster"][(cluster, site)] = {
-                "num_cores": [ num_cores ],
-                "xhpl_grid": [ (int(num_cores / p), p) for p in range(1, int(math.sqrt(num_cores)) + 1) ],
+                "num_cores": {
+                    1: {
+                        "xhpl_grid": [ (1, 1) ]
+                        },
+                    num_cores: {
+                        "xhpl_grid": [ (int(num_cores / p), p) for p in range(1, int(math.sqrt(num_cores)) + 1) ]
+                        }
+                    },
                 "xhpl_n": [100, 600, 1200, big_size],
                 "xhpl_pfact": [0, 1, 2],
                 "xhpl_rfact": [0, 1, 2],

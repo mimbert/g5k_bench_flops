@@ -1,6 +1,6 @@
 #!/usr/bin/env python
 
-import optparse, fileinput, re, numpy, os.path
+import optparse, fileinput, re, numpy, os.path, sys, itertools
 from common import *
 
 if __name__ == "__main__":
@@ -10,19 +10,35 @@ if __name__ == "__main__":
     resultdirs = set([arg.rstrip("/") for arg in args])
     cluster_results = dict()
     cluster_name_re = re.compile("^(\w+)-\d+")
+    num_cores_re = re.compile("-num_cores-(\d+)-")
+    hplout_gflops_re = re.compile("^\w+\s+\d+\s+\d+\s+\d+\s+\d+\s+[0-9.]+\s+([0-9.e+-]+)$")
     resultfiles = find_files(resultdirs, "-name", "HPL.out")
     for resultfile in resultfiles:
-        _, _, filedir = os.path.dirname(resultfile).rpartition("/")
-        mo = cluster_name_re.match(filedir)
-        if mo:
-            cluster = mo.group(1)
-            if not cluster_results.has_key(cluster):
-                cluster_results[cluster] = []
+        dirs = resultfile.split("/")
+        cluster_name_mo = cluster_name_re.match(dirs[-2])
+        num_cores_mo = num_cores_re.search(dirs[-3])
+        if cluster_name_mo and num_cores_mo:
+            cluster = cluster_name_mo.group(1)
+            num_cores = int(num_cores_mo.group(1))
+            if not cluster_results.has_key((cluster, num_cores)):
+                cluster_results[(cluster, num_cores)] = []
             gflops = []
             for line in fileinput.input(resultfile):
-                mo = re.search("^\w+\s+\d+\s+\d+\s+\d+\s+\d+\s+[0-9.]+\s+([0-9.e+-]+)$", line)
-                if mo:
-                    cluster_results[cluster].append(float(mo.group(1)))
+                hplout_glfops_mo = hplout_gflops_re.search(line)
+                if hplout_glfops_mo:
+                    cluster_results[(cluster, num_cores)].append(float(hplout_glfops_mo.group(1)))
+        else:
+            print >> sys.stderr, "error parsing filename %s" % (resultfile,)
+            print "cluster_name_mo = %s" % (cluster_name_mo,)
+            print "num_cores_mo = %s" % (num_cores_mo,)
+            print "dirs = %s" % (dirs,)
+            print "dirs[-1] = %s" % (dirs[-1],)
+            print "dirs[-2] = %s" % (dirs[-2],)
+            print "dirs[-3] = %s" % (dirs[-3],)
 
-    for cluster in cluster_results:
-        print "cluster %s - gflops max = %f" % (cluster, numpy.amax(cluster_results[cluster]))
+    def clusterkeyfunc(tuple):
+        return tuple[0]
+    for (key, group) in itertools.groupby(sorted(cluster_results.keys(), key = clusterkeyfunc), clusterkeyfunc):
+        print key
+        for (cluster, num_cores) in sorted(group, key = lambda tuple: tuple[1]):
+            print "  num_cores = %i - gflops max = %f" % (num_cores, numpy.amax(cluster_results[cluster, num_cores]))
