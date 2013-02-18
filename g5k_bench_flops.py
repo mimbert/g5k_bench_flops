@@ -68,13 +68,14 @@ class g5k_bench_flops(execo_engine.Engine):
             parameters["cluster"][(cluster, site)] = {
                 "num_cores": {
                     1: {
-                        "xhpl_grid": [ (1, 1) ]
+                        "xhpl_grid": [ (1, 1) ],
+                        "xhpl_n": [100, 600, 1200, big_size // num_cores],
                         },
                     num_cores: {
-                        "xhpl_grid": [ (int(num_cores / p), p) for p in range(1, int(math.sqrt(num_cores)) + 1) ]
+                        "xhpl_grid": [ (int(num_cores / p), p) for p in range(1, int(math.sqrt(num_cores)) + 1) ],
+                        "xhpl_n": [100, 600, 1200, big_size],
                         }
                     },
-                "xhpl_n": [100, 600, 1200, big_size],
                 "xhpl_pfact": [0, 1, 2],
                 "xhpl_rfact": [0, 1, 2],
                 }
