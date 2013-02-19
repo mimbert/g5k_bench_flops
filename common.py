@@ -27,17 +27,12 @@ preparation_dir = "preparation"
 def prepared_archive(package, cluster):
     return "compiled-%s-%s-%s.tgz" % (package, packages[package]["version"], cluster)
 
-def find_files(path, *args):
+def find_files(*args):
     """run find utility with given path(es) and parameters, return the result as a list"""
-    if not hasattr(path, "__iter__"):
-        path = [ path ]
-    find_args = [ "find" ]
-    find_args.extend(path)
-    find_args.extend(args)
-    p = subprocess.Popen(find_args,
+    find_args = "find " + " ".join(args)
+    p = subprocess.Popen(find_args, shell = True,
                          stdout = subprocess.PIPE,
                          stderr = subprocess.PIPE)
-    (stdout, _) = p.communicate()
+    (stdout, stderr) = p.communicate()
     p.wait()
     return [ p for p in stdout.split("\n") if p ]
-
