@@ -57,7 +57,7 @@ class g5k_bench_flops(execo_engine.Engine):
             "cluster": {},
             "blas": ["atlas"],
             "num_nodes": [1],
-            "xhpl_nb": [ 64, 128, 256, 512 ],
+            "xhpl_nb": [ 64, 128, 256 ],
             "repl": range(0, self.options.num_replicas)
             }
         for (cluster, site) in clusters_threads.keys():
