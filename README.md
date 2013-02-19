@@ -6,6 +6,8 @@ automate flops benchmarking of grid5000 clusters
 installation:
 -------------
 
+- dependencies: execo http://execo.gforge.inria.fr/doc/
+
 - clone the repo
 
 - add to the root dir the following files, I prefer not putting them on the repo because these are distribution packages and because of possible licensing issues (i did not check):
