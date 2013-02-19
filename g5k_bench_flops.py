@@ -62,7 +62,7 @@ class g5k_bench_flops(execo_engine.Engine):
             }
         for (cluster, site) in clusters_threads.keys():
             attrs = execo_g5k.get_host_attributes(cluster + "-1")
-            num_cores = attrs["architecture"]["smp_size"] * attrs["architecture"]["smt_size"]
+            num_cores = attrs["architecture"]["smt_size"]
             free_mem = attrs["main_memory"]["ram_size"] - 300000000
             big_size = int(math.sqrt(free_mem/8.0)*0.8)
             parameters["cluster"][(cluster, site)] = {
