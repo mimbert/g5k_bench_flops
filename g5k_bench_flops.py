@@ -87,7 +87,7 @@ class g5k_bench_flops(execo_engine.Engine):
         num_total_workers = 0
         while len(self.sweeper.get_remaining()) > 0:
             t = execo.Timer()
-            execo_engine.logger.info("schedule loop start. sweeper: %s" % (self.sweeper,))
+            execo_engine.logger.debug("schedule loop start. sweeper: %s" % (self.sweeper,))
             # when passing from non-charter to charter time period, or
             # the reverse, kill all previously subitted jobs still in
             # waiting:
@@ -111,13 +111,13 @@ class g5k_bench_flops(execo_engine.Engine):
                 num_new_workers = min(self.options.max_workers - num_workers,
                                       self.options.max_waiting - num_waiting,
                                       num_combs_remaining)
-                execo_engine.logger.info("rescheduling on cluster %s@%s: num_workers = %s / num_waiting = %s / num_combs_remaining = %s / num_new_workers = %s" %
-                                         (cluster, site,
-                                          num_workers,
-                                          num_waiting,
-                                          num_combs_remaining,
-                                          num_new_workers))
                 if num_new_workers > 0:
+                    execo_engine.logger.info("rescheduling on cluster %s@%s: num_workers = %s / num_waiting = %s / num_combs_remaining = %s / num_new_workers = %s" %
+                                             (cluster, site,
+                                              num_workers,
+                                              num_waiting,
+                                              num_combs_remaining,
+                                              num_new_workers))
                     for worker_index in range(0, num_new_workers):
                         th = threading.Thread(target = self.worker, args = (cluster, site, num_total_workers,), name = "bench flops worker %i - cluster = %s@%s" % (num_total_workers, cluster, site))
                         th.waiting = True
@@ -127,7 +127,14 @@ class g5k_bench_flops(execo_engine.Engine):
                         th.start()
                         num_total_workers += 1
                         clusters_threads[(cluster, site)].append(th)
-            execo_engine.logger.info("schedule loop end. took: %ss." % (t.elapsed(),))
+                else:
+                    execo_engine.logger.debug("rescheduling on cluster %s@%s: num_workers = %s / num_waiting = %s / num_combs_remaining = %s / num_new_workers = %s" %
+                                              (cluster, site,
+                                               num_workers,
+                                               num_waiting,
+                                               num_combs_remaining,
+                                               num_new_workers))
+            execo_engine.logger.debug("schedule loop end. took: %ss." % (t.elapsed(),))
             execo.sleep(self.options.schedule_delay)
 
     def worker(self, cluster, site, worker_index):
