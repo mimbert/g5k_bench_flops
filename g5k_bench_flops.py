@@ -11,7 +11,7 @@ def g5k_charter_time(t):
     #   a period where charter is not applicable (night, weekends)
     l = time.localtime(t)
     if l.tm_wday in [5, 6]: return False # week-end
-    if l.tm_hour < 9 or l.tm_hour >= 19: return False # nuit
+    if l.tm_hour < 8 or l.tm_hour >= 19: return False # nuit
     return True
 
 def g5k_crossed_charter_boundary(t):
