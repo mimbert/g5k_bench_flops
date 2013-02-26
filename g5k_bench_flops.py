@@ -87,7 +87,7 @@ class g5k_bench_flops(execo_engine.Engine):
         num_total_workers = 0
         while len(self.sweeper.get_remaining()) > 0:
             t = execo.Timer()
-            execo_engine.logger.debug("schedule loop start. sweeper: %s" % (self.sweeper,))
+            execo_engine.logger.debug("schedule loop iteration start. sweeper: %s" % (self.sweeper,))
             # when passing from non-charter to charter time period, or
             # the reverse, kill all previously subitted jobs still in
             # waiting:
@@ -134,8 +134,9 @@ class g5k_bench_flops(execo_engine.Engine):
                                                num_waiting,
                                                num_combs_remaining,
                                                num_new_workers))
-            execo_engine.logger.debug("schedule loop end. took: %ss." % (t.elapsed(),))
+            execo_engine.logger.debug("schedule loop iteration end. took: %ss." % (t.elapsed(),))
             execo.sleep(self.options.schedule_delay)
+        execo_engine.logger.info("no more combinations to explore. exit schedule loop")
 
     def worker(self, cluster, site, worker_index):
         jobid = None
