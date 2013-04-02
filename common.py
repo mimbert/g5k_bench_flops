@@ -29,7 +29,7 @@ def prepared_archive(package, cluster):
 
 def find_files(*args):
     """run find utility with given path(es) and parameters, return the result as a list"""
-    find_args = "find " + " ".join(args)
+    find_args = "find " + " ".join([quote(arg) for arg in args])
     p = subprocess.Popen(find_args, shell = True,
                          stdout = subprocess.PIPE,
                          stderr = subprocess.PIPE)
