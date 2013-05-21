@@ -1,6 +1,8 @@
 atlas*.tar.bz2
 hpl*.tar.gz
 openmpi*.tar.bz2
+g5k_bench_flops_*
+g5k_prepare_bench_flops_*
 
 *.py[cod]
 
