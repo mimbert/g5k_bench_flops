@@ -23,6 +23,14 @@ running
 
 - adapt packages dict if needed (if using different versions of atlas, hpl, openmpi) in common.py
 
+- configure execo for automatic oarsh connexion (see http://execo.gforge.inria.fr/doc/execo_g5k.html#the-perfect-grid5000-connection-configuration):
+
+  - choose a key without passphrase inside grid5000, which will be used for all oar / oargrid jobs
+
+  - set it in your environment: export OAR_JOB_KEY_FILE=<path to chosen private key>
+
+  - this env var will be used both by oar / oargrid / oarsh and execo
+
 - run g5k_prepare_bench_flops to precompile each packages on all clusters (the precompiled packages will be downloaded in directory preparation/)
 
 - run g5k_bench_flops
