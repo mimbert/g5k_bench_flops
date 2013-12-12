@@ -31,6 +31,7 @@ class g5k_bench_flops(execo_engine.Engine):
         self.options_parser.add_option("-s", dest = "schedule_delay", help = "delay between rescheduling worker jobs", type = "int", default = 10)
         self.options_parser.add_option("-n", dest = "num_replicas", help = "num xp replicas: how many repetition of bench runs", type ="int", default = 5)
         self.options_parser.add_option("-C", dest = "charter", help = "activate submission of best-effort jobs during time periods where g5k charter is applicable", action =  "store_true", default = False)
+        self.options_parser.add_option("-m", dest = "ramlimit", help = "ram limit in GB (to avoid bench taking too much time)", type = "int", default = 16)
         self.options_parser.add_argument("clusters", "comma separated list of clusters")
         self.prepare_path = pjoin(self.engine_dir, "preparation")
 
@@ -55,7 +56,7 @@ class g5k_bench_flops(execo_engine.Engine):
         for (cluster, site) in clusters_threads.keys():
             attrs = execo_g5k.get_host_attributes(cluster + "-1")
             num_cores = attrs["architecture"]["smt_size"]
-            free_mem = attrs["main_memory"]["ram_size"] - 300000000
+            free_mem = int(min(attrs["main_memory"]["ram_size"] - .3e9, self.options.ramlimit * 1e9))
             big_size = int(math.sqrt(free_mem/8.0)*0.8)
             parameters["cluster"][(cluster, site)] = {
                 "num_cores": {
