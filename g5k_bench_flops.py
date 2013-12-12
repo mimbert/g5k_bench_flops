@@ -143,8 +143,8 @@ class g5k_bench_flops(execo_engine.Engine):
                 arg))
 
         def update_nodes(action):
-            good_nodes = [ process.host() for process in action.processes() if process.finished_ok() ]
-            num_lost_nodes = len(action.processes()) - len(good_nodes)
+            good_nodes = set([ process.host for process in action.processes if process.finished_ok ])
+            num_lost_nodes = len(set([process.host for process in action.processes])) - len(good_nodes)
             if num_lost_nodes > 0:
                 worker_log("lost %i nodes" % num_lost_nodes)
             return good_nodes
@@ -224,18 +224,20 @@ HPL.out      output file name (if any)
                     print >> f, xhplconf
                 # prepare nodes
                 worker_log("copy files to nodes")
-                preparation = execo.Put(
-                    nodes,
-                    local_files = ([ pjoin(self.prepare_path, prepared_archive(package, comb["cluster"][0]))
-                                     for package in [ "atlas", "openmpi", "hpl" ] ] +
-                                   [ pjoin(self.engine_dir, "node_bench_flops"),
-                                     pjoin(comb_dir, "HPL.dat") ]),
-                    remote_location = node_working_dir,
-                    create_dirs = True,
-                    connexion_params = execo_g5k.default_oarsh_oarcp_params,
-                    name = "copy files")
+                preparation = execo.SequentialActions([
+                        execo.Remote("mkdir -p " + node_working_dir,
+                                     nodes,
+                                     connection_params = execo_g5k.default_oarsh_oarcp_params),
+                        execo.Put(
+                            nodes,
+                            local_files = ([ pjoin(self.prepare_path, prepared_archive(package, comb["cluster"][0]))
+                                             for package in [ "atlas", "openmpi", "hpl" ] ] +
+                                           [ pjoin(self.engine_dir, "node_bench_flops"),
+                                             pjoin(comb_dir, "HPL.dat") ]),
+                            remote_location = node_working_dir,
+                            connection_params = execo_g5k.default_oarsh_oarcp_params)])
                 preparation.run()
-                if not preparation.ok():
+                if not preparation.ok:
                     if preparation.stats()['num_ok'] < comb['num_nodes']:
                         worker_log("aborting, copy of files failed on too much nodes:\n" + execo.Report([preparation]).to_string())
                         self.sweeper.cancel(comb)
@@ -252,20 +254,16 @@ HPL.out      output file name (if any)
                         " ".join([ prepared_archive(package, comb["cluster"][0])
                                    for package in [ "atlas", "openmpi", "hpl" ] ])),
                     nodes,
-                    connexion_params = execo_g5k.default_oarsh_oarcp_params,
-                    name = "bench nb=%i p*q=%i*%i %s" % (
-                        comb["xhpl_nb"],
-                        comb["xhpl_grid"][0],
-                        comb["xhpl_grid"][1],
-                        comb["blas"]))
+                    connection_params = execo_g5k.default_oarsh_oarcp_params)
                 bench.run()
                 failed = False
-                if not bench.ok():
+                if not bench.ok:
                     if bench.stats()['num_ok'] < comb['num_nodes']:
                         failed = True
                         worker_log("bench failed on too much nodes:\n" + execo.Report([bench]).to_string())
                         self.sweeper.cancel(comb)
                 # retrieve stdout from all node
+                execo.Process("mkdir -p " + " ".join([pjoin(comb_dir, n.address) for n in nodes])).run()
                 worker_log("retrieve logs in %s" % (comb_dir,))
                 retrieval1 = execo.Get(
                     nodes,
@@ -273,16 +271,10 @@ HPL.out      output file name (if any)
                         "%s/%s/bin/Linux_PII_CBLAS/HPL.dat" % (node_working_dir, packages["hpl"]["extract_dir"]),
                         "%s/stdout" % node_working_dir],
                     local_location = pjoin(comb_dir, "{{{host}}}"),
-                    create_dirs = True,
-                    connexion_params = execo_g5k.default_oarsh_oarcp_params,
-                    name = "get logs nb=%i p*q=%i*%i %s" % (
-                        comb["xhpl_nb"],
-                        comb["xhpl_grid"][0],
-                        comb["xhpl_grid"][1],
-                        comb["blas"]))
+                    connection_params = execo_g5k.default_oarsh_oarcp_params)
                 retrieval1.run()
                 if failed:
-                    worker_log("bench failed, got the logs, aborting")
+                    worker_log("bench failed - tried to get the logs - aborting")
                     return
                 # retrieve results
                 nodes = update_nodes(bench)
@@ -291,15 +283,9 @@ HPL.out      output file name (if any)
                     nodes,
                     remote_files = [ "%s/%s/bin/Linux_PII_CBLAS/HPL.out" % (node_working_dir, packages["hpl"]["extract_dir"]) ],
                     local_location = pjoin(comb_dir, "{{{host}}}"),
-                    create_dirs = True,
-                    connexion_params = execo_g5k.default_oarsh_oarcp_params,
-                    name = "get results nb=%i p*q=%i*%i %s" % (
-                        comb["xhpl_nb"],
-                        comb["xhpl_grid"][0],
-                        comb["xhpl_grid"][1],
-                        comb["blas"]))
+                    connection_params = execo_g5k.default_oarsh_oarcp_params)
                 retrieval2.run()
-                if not retrieval2.ok():
+                if not retrieval2.ok:
                     if retrieval2.stats()['num_ok'] < comb['num_nodes']:
                         [ os.unlink(p) for p in find_files(comb_dir, "-name", "HPL.out") ]
                         worker_log("aborting, results retrieval failed on too much nodes:\n" + execo.Report([retrieval2]).to_string())

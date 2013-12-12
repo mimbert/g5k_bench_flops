@@ -74,16 +74,18 @@ class g5k_prepare_bench_flops(execo_engine.Engine):
             def prepare_package(package):
                 worker_log("preparing package %s" % package)
                 worker_log("copy %s files to nodes" % package)
-                preparation = execo.Put(nodes,
-                                        local_files = ([ pjoin(self.engine_dir, packages[package]["archive"]),
-                                                         pjoin(self.engine_dir, "node_prepare_" +  package) ] +
-                                                       [ pjoin(self.prepare_path, prepared_archive(dep, cluster)) for dep in packages[package]["deps"] ]),
-                                        remote_location = node_working_dir,
-                                        create_dirs = True,
-                                        connexion_params = execo_g5k.default_oarsh_oarcp_params,
-                                        name = "copy files")
+                preparation = execo.SequentialActions(
+                    [ execo.Remote("mkdir -p " + node_working_dir,
+                                   nodes,
+                                   connection_params = execo_g5k.default_oarsh_oarcp_params),
+                      execo.Put(nodes,
+                                local_files = ([ pjoin(self.engine_dir, packages[package]["archive"]),
+                                                 pjoin(self.engine_dir, "node_prepare_" +  package) ] +
+                                               [ pjoin(self.prepare_path, prepared_archive(dep, cluster)) for dep in packages[package]["deps"] ]),
+                                remote_location = node_working_dir,
+                                connection_params = execo_g5k.default_oarsh_oarcp_params)])
                 preparation.run()
-                if not preparation.ok():
+                if not preparation.ok:
                     worker_log("aborting, copy of %s files failed:\n%s" % (package, execo.Report([preparation]).to_string()))
                     return False
                 worker_log("compile %s" % package)
@@ -98,23 +100,21 @@ class g5k_prepare_bench_flops(execo_engine.Engine):
                                                                           node_working_dir,
                                                                           prepared_archive(package, cluster)),
                     nodes,
-                    connexion_params = execo_g5k.default_oarsh_oarcp_params,
-                    name = "compilation")
+                    connection_params = execo_g5k.default_oarsh_oarcp_params)
                 compil.run()
-                if not compil.ok():
+                if not compil.ok:
                     worker_log("%s compilation failed:\n%s" % (package, execo.Report([compil]).to_string()))
                 worker_log("retrieve result of %s compilation" % package)
                 remote_files = [ pjoin(node_working_dir, prepared_archive(package, cluster) + ".stdout") ]
-                if compil.ok():
+                if compil.ok:
                     remote_files.append(pjoin(node_working_dir, prepared_archive(package, cluster)))
                 retrieval = execo.Get(
                     nodes,
                     remote_files = remote_files,
                     local_location = self.prepare_path,
-                    connexion_params = execo_g5k.default_oarsh_oarcp_params,
-                    name = "get built package")
+                    connection_params = execo_g5k.default_oarsh_oarcp_params)
                 retrieval.run()
-                if not retrieval.ok():
+                if not retrieval.ok:
                     try:
                         os.unlink(pjoin(self.prepare_path, prepared_archive(package, cluster)))
                     except:
