@@ -30,6 +30,7 @@ class g5k_bench_flops(execo_engine.Engine):
         self.options_parser.add_option("-t", dest = "max_waiting", help = "maximum number of concurrent waiting jobs per cluster", type = "int", default = 2)
         self.options_parser.add_option("-s", dest = "schedule_delay", help = "delay between rescheduling worker jobs", type = "int", default = 10)
         self.options_parser.add_option("-n", dest = "num_replicas", help = "num xp replicas: how many repetition of bench runs", type ="int", default = 5)
+        self.options_parser.add_option("-C", dest = "charter", help = "activate submission of best-effort jobs during time periods where g5k charter is applicable", action =  "store_true", default = False)
         self.options_parser.add_argument("clusters", "comma separated list of clusters")
         self.prepare_path = pjoin(self.engine_dir, "preparation")
 
@@ -82,7 +83,7 @@ class g5k_bench_flops(execo_engine.Engine):
             # when passing from non-charter to charter time period, or
             # the reverse, kill all previously subitted jobs still in
             # waiting:
-            if g5k_crossed_charter_boundary(time.time()):
+            if self.options.charter and g5k_crossed_charter_boundary(time.time()):
                 for cluster, site in clusters_threads.keys():
                     for w in clusters_threads[(cluster, site)]:
                         if w.waiting: w.to_delete = True
@@ -159,7 +160,7 @@ class g5k_bench_flops(execo_engine.Engine):
                                                      walltime = self.options.walltime,
                                                      name = "flopsworker",
                                                      additional_options = self.options.oar_options)
-                if g5k_charter_time(time.time()):
+                if self.options.charter and g5k_charter_time(time.time()):
                     submission.job_type = "besteffort"
                 ((jobid, _),) = execo_g5k.oarsub([(submission, site)])
                 if not jobid:
