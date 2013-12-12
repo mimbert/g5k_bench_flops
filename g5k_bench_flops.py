@@ -1,18 +1,9 @@
 import sys, os, shutil, time, math, threading, time
 import execo, execo_g5k, execo_engine
+from execo_g5k.planning import g5k_charter_time
 from os.path import join as pjoin
 import pprint
 from common import *
-
-def g5k_charter_time(t):
-    # - param: a unix timestamp
-    # - returns a boolean, True if the given timestamp is in a period
-    #   where the g5k charter needs to be respected, False if it is in
-    #   a period where charter is not applicable (night, weekends)
-    l = time.localtime(t)
-    if l.tm_wday in [5, 6]: return False # week-end
-    if l.tm_hour < 8 or l.tm_hour >= 19: return False # nuit
-    return True
 
 def g5k_crossed_charter_boundary(t):
     # - param: a unix timestamp
