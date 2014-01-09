@@ -23,7 +23,7 @@ running
 
 - adapt packages dict if needed (if using different versions of atlas, hpl, openmpi) in common.py
 
-- configure execo for automatic oarsh connexion (see http://execo.gforge.inria.fr/doc/execo_g5k.html#the-perfect-grid5000-connection-configuration):
+- configure execo for automatic oarsh connexion. See http://execo.gforge.inria.fr/doc/execo_g5k.html#the-perfect-grid5000-connection-configuration
 
   - choose a key without passphrase inside grid5000, which will be used for all oar / oargrid jobs
 
