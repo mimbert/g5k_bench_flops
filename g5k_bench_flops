@@ -1,51 +1,42 @@
-import sys, os, shutil, time, math, threading, time
-import execo, execo_g5k, execo_engine
-from execo_g5k.planning import g5k_charter_time
+#!/usr/bin/env python
+
+import sys, os, time, math, pprint
 from os.path import join as pjoin
-import pprint
+from execo import Remote, SequentialActions, Put, Get, Report, Process, filter_bad_hosts
+from execo_g5k import get_host_attributes, OarSubmission, g5k_charter_time
+from execo_engine import logger, ParamSweeper, sweep, slugify
+from g5k_cluster_engine import g5k_cluster_engine, worker_log
 from common import *
 
-def g5k_crossed_charter_boundary(t):
-    # - param: a unix timestamp
-    # - returns True if a g5k charter time boundary has been crossed
-    #   since the last call. returns False if not or if it is the
-    #   first call
-    if g5k_crossed_charter_boundary.previous_t == None:
-        retval = False
-    else:
-        retval = g5k_charter_time(g5k_crossed_charter_boundary.previous_t) != g5k_charter_time(t)
-    g5k_crossed_charter_boundary.previous_t = t
-    return retval
-g5k_crossed_charter_boundary.previous_t = None
-
-class g5k_bench_flops(execo_engine.Engine):
+class g5k_bench_flops(g5k_cluster_engine):
 
     def __init__(self):
         super(g5k_bench_flops, self).__init__()
         self.options_parser.set_usage("usage: %prog <comma separated list of clusters>")
         self.options_parser.set_description("compile and install openmpi, atlas, xhpl, then run xhpl bench to get max flops for cluster nodes")
-        self.options_parser.add_option("-o", dest = "oar_options", help = "oar reservation options", default = None)
-        self.options_parser.add_option("-w", dest = "walltime", help = "walltime of bench jobs", type = "string", default = "5:0:0")
-        self.options_parser.add_option("-r", dest = "max_workers", help = "maximum number of concurrent worker jobs per cluster", type = "int", default = 20)
-        self.options_parser.add_option("-t", dest = "max_waiting", help = "maximum number of concurrent waiting jobs per cluster", type = "int", default = 2)
-        self.options_parser.add_option("-s", dest = "schedule_delay", help = "delay between rescheduling worker jobs", type = "int", default = 10)
-        self.options_parser.add_option("-n", dest = "num_replicas", help = "num xp replicas: how many repetition of bench runs", type ="int", default = 5)
-        self.options_parser.add_option("-C", dest = "charter", help = "activate submission of best-effort jobs during time periods where g5k charter is applicable", action =  "store_true", default = False)
-        self.options_parser.add_option("-m", dest = "ramlimit", help = "ram limit in GB (to avoid bench taking too much time)", type = "int", default = 16)
+        self.options_parser.add_option("-o", dest = "oar_options", default = None,
+                                       help = "oar reservation options")
+        self.options_parser.add_option("-w", dest = "walltime", default = "5:0:0",
+                                       help = "walltime of bench jobs", type = "string")
+        self.options_parser.add_option("-n", dest = "num_replicas", type = "int", default = 5,
+                                       help = "num xp replicas: how many repetition of bench runs")
+        self.options_parser.add_option("-C", dest = "charter", action = "store_true", default = False,
+                                       help = "activate submission of best-effort jobs during time periods where g5k charter is applicable")
+        self.options_parser.add_option("-T", dest = "testing", action = "store_true", default = False,
+                                       help = "use api branch testing (conflicts with option -C)")
+        self.options_parser.add_option("-m", dest = "ramlimit", type = "int", default = 16,
+                                       help = "ram limit in GB (to avoid bench taking too much time)")
         self.options_parser.add_argument("clusters", "comma separated list of clusters")
         self.prepare_path = pjoin(self.engine_dir, "preparation")
 
-    def run(self):
+    def init(self):
         if len(self.args) != 1:
             print "ERROR: wrong number of arguments"
             self.options_parser.print_help(file=sys.stderr)
             exit(1)
-        clusters_threads = dict()
-        for cluster in self.args[0].split(","):
-            clusters_threads[(cluster, execo_g5k.get_cluster_site(cluster))] = list()
-        sites = set([s for (c,s) in clusters_threads.keys()])
-        execo_engine.logger.info("clusters = %s" % (clusters_threads.keys(),))
-        execo_engine.logger.info("sites = %s" % (sites,))
+        if self.options.testing:
+            g5k_configuration['api_additional_args'].append("branch=testing")
+        clusters = self.args[0].split(",")
         parameters = {
             "cluster": {},
             "blas": ["atlas"],
@@ -53,12 +44,12 @@ class g5k_bench_flops(execo_engine.Engine):
             "xhpl_nb": [ 64, 128, 256 ],
             "repl": range(0, self.options.num_replicas)
             }
-        for (cluster, site) in clusters_threads.keys():
-            attrs = execo_g5k.get_host_attributes(cluster + "-1")
+        for cluster in clusters:
+            attrs = get_host_attributes(cluster + "-1")
             num_cores = attrs["architecture"]["smt_size"]
             free_mem = int(min(attrs["main_memory"]["ram_size"] - .3e9, self.options.ramlimit * 1e9))
             big_size = int(math.sqrt(free_mem/8.0)*0.8)
-            parameters["cluster"][(cluster, site)] = {
+            parameters["cluster"][cluster] = {
                 "num_cores": {
                     1: {
                         "xhpl_grid": [ (1, 1) ],
@@ -72,117 +63,45 @@ class g5k_bench_flops(execo_engine.Engine):
                 "xhpl_pfact": [0, 1, 2],
                 "xhpl_rfact": [0, 1, 2],
                 }
-        execo_engine.logger.info("parameters:\n" + pprint.pformat(parameters))
-        execo_engine.logger.info("len(sweeps) = %i" % len(execo_engine.sweep(parameters)))
-        self.sweeper = execo_engine.ParamSweeper(pjoin(self.result_dir, "parameters"),
-                                                 execo_engine.sweep(parameters),
-                                                 save_sweeps = True)
-        num_total_workers = 0
-        while len(self.sweeper.get_remaining()) > 0:
-            t = execo.Timer()
-            #execo_engine.logger.debug("schedule loop iteration start. sweeper: %s" % (self.sweeper,))
-            # when passing from non-charter to charter time period, or
-            # the reverse, kill all previously subitted jobs still in
-            # waiting:
-            if self.options.charter and g5k_crossed_charter_boundary(time.time()):
-                for cluster, site in clusters_threads.keys():
-                    for w in clusters_threads[(cluster, site)]:
-                        if w.waiting: w.to_delete = True
-            jobs_to_kill = []
-            for cluster, site in clusters_threads.keys():
-                for w in clusters_threads[(cluster, site)]:
-                    if w.waiting and w.to_delete and w.jobid:
-                        jobs_to_kill.append((w.jobid, site))
-            if len(jobs_to_kill) > 0:
-                execo_engine.logger.info("g5k user charter status change, killing %s" % (jobs_to_kill,))
-                execo_g5k.oardel(jobs_to_kill)
-            for cluster, site in clusters_threads.keys():
-                clusters_threads[(cluster, site)] = [w for w in clusters_threads[(cluster, site)] if w.is_alive()]
-                num_workers = len(clusters_threads[(cluster, site)])
-                num_waiting = len([w for w in clusters_threads[(cluster, site)] if w.waiting])
-                num_combs_remaining = len([comb for comb in self.sweeper.get_remaining() if comb["cluster"] == (cluster, site) ])
-                num_new_workers = min(self.options.max_workers - num_workers,
-                                      self.options.max_waiting - num_waiting,
-                                      num_combs_remaining)
-                if num_new_workers > 0:
-                    execo_engine.logger.info("rescheduling on cluster %s@%s: num_workers = %s / num_waiting = %s / num_combs_remaining = %s / num_new_workers = %s" %
-                                             (cluster, site,
-                                              num_workers,
-                                              num_waiting,
-                                              num_combs_remaining,
-                                              num_new_workers))
-                    for worker_index in range(0, num_new_workers):
-                        th = threading.Thread(target = self.worker, args = (cluster, site, num_total_workers,), name = "bench flops worker %i - cluster = %s@%s" % (num_total_workers, cluster, site))
-                        th.waiting = True
-                        th.jobid = None
-                        th.to_delete = False
-                        th.site = site
-                        th.start()
-                        num_total_workers += 1
-                        clusters_threads[(cluster, site)].append(th)
-                else:
-                    execo_engine.logger.debug("rescheduling on cluster %s@%s: num_workers = %s / num_waiting = %s / num_combs_remaining = %s / num_new_workers = %s" %
-                                              (cluster, site,
-                                               num_workers,
-                                               num_waiting,
-                                               num_combs_remaining,
-                                               num_new_workers))
-            #execo_engine.logger.debug("schedule loop iteration end. took: %ss." % (t.elapsed(),))
-            execo.sleep(self.options.schedule_delay)
-        execo_engine.logger.info("no more combinations to explore. exit schedule loop")
+        self.sweeper = ParamSweeper(pjoin(self.result_dir, "bench_params"),
+                                    sweep(parameters),
+                                    save_sweeps = True)
+        logger.info("parameters:\n" + pprint.pformat(parameters))
+        logger.info("len(sweeps) = %i" % len(sweep(parameters)))
 
-    def worker(self, cluster, site, worker_index):
-        jobid = None
-        comb = None
+    def get_clusters(self):
+        return list(set([ comb["cluster"] for comb in self.sweeper.get_remaining() ]))
 
-        def worker_log(arg):
-            execo_engine.logger.info("worker #%i %s@%s - job %s: %s" % (
-                worker_index,
-                cluster,
-                site,
-                jobid,
-                arg))
+    def get_job(self, cluster):
+        comb = self.sweeper.get_next(filtr = lambda r: filter(lambda comb: comb["cluster"] == cluster, r))
+        if not comb:
+            return None
+        submission = OarSubmission(resources = "{cluster='%s'}/nodes=%i" % (cluster, comb['num_nodes']),
+                                   walltime = self.options.walltime,
+                                   name = "flopsworker",
+                                   job_type = ["allow_classic_ssh"],
+                                   additional_options = self.options.oar_options)
+        if self.options.charter and g5k_charter_time(time.time()):
+            submission.job_type.append("besteffort")
+        return submission, comb
 
-        def update_nodes(action):
-            good_nodes = set([ process.host for process in action.processes if process.finished_ok ])
-            num_lost_nodes = len(set([process.host for process in action.processes])) - len(good_nodes)
-            if num_lost_nodes > 0:
-                worker_log("lost %i nodes" % num_lost_nodes)
-            return good_nodes
+    def worker(self, cluster, site, comb, nodes, worker_index, oarsubmission, jobid):
 
-        try:
-            comb = self.sweeper.get_next(filtr = lambda r: filter(lambda comb: comb["cluster"] == (cluster, site), r))
-            worker_log("new comb: %s" % (comb,))
-
-            if comb:
-                # submit job
-                worker_log("submit oar job")
-                submission = execo_g5k.OarSubmission(resources = "{'cluster=\"%s\"'}/nodes=%i" % (cluster, comb['num_nodes']),
-                                                     walltime = self.options.walltime,
-                                                     name = "flopsworker",
-                                                     additional_options = self.options.oar_options)
-                if self.options.charter and g5k_charter_time(time.time()):
-                    submission.job_type = "besteffort"
-                ((jobid, _),) = execo_g5k.oarsub([(submission, site)])
-                if not jobid:
-                    worker_log("aborting, job submission failed")
+        def check_enough_nodes(action, comb, message):
+            if not action.ok:
+                if action.stats()['num_ok'] < comb['num_nodes']:
+                    worker_log.info("%s:\n%s" % (message, Report([action]).to_string()))
                     self.sweeper.cancel(comb)
-                    return
-                threading.current_thread().jobid = jobid
-                worker_log("job submitted - wait job start")
-                execo_g5k.wait_oar_job_start(jobid, site, prediction_callback = lambda ts: worker_log("job start prediction: %s" % (execo.format_date(ts),)))
-                threading.current_thread().waiting = False
-                worker_log("job started - get job nodes")
-                nodes = execo_g5k.get_oar_job_nodes(jobid, site)
-                worker_log("nodes = %s" % (nodes,))
-                # generate configuration
-                comb_dir = pjoin(self.result_dir, execo_engine.slugify(comb))
-                try:
-                    os.makedirs(comb_dir)
-                except OSError:
-                    pass # if directory already exists (from a previously interrupted run)
-                worker_log("generate bench params in %s" % (comb_dir,))
-                xhplconf = """HPLinpack benchmark input file
+                    return False
+            return True
+
+        comb_dir = pjoin(self.result_dir, slugify(comb))
+        try:
+            os.makedirs(comb_dir)
+        except OSError:
+            pass # if directory already exists (from a previously interrupted run)
+        worker_log.info("generate bench params in %s" % (comb_dir,))
+        xhplconf = """HPLinpack benchmark input file
 Innovative Computing Laboratory, University of Tennessee
 HPL.out      output file name (if any)
 8            device out (6=stdout,7=stderr,file)
@@ -214,89 +133,70 @@ HPL.out      output file name (if any)
 1            Equilibration (0=no,1=yes)
 8            memory alignment in double (> 0)
 """
-                xhplconf = xhplconf.format(
-                    ns = comb["xhpl_n"],
-                    nbs = comb["xhpl_nb"],
-                    grid_ps = comb["xhpl_grid"][0],
-                    grid_qs = comb["xhpl_grid"][1],
-                    pfacts = comb["xhpl_pfact"],
-                    rfacts = comb["xhpl_rfact"])
-                with open(pjoin(comb_dir,"HPL.dat"), "w") as f:
-                    print >> f, xhplconf
-                # prepare nodes
-                worker_log("copy files to nodes")
-                preparation = execo.SequentialActions([
-                        execo.Remote("mkdir -p " + node_working_dir,
-                                     nodes,
-                                     connection_params = execo_g5k.default_oarsh_oarcp_params),
-                        execo.Put(
-                            nodes,
-                            local_files = ([ pjoin(self.prepare_path, prepared_archive(package, comb["cluster"][0]))
-                                             for package in [ "atlas", "openmpi", "hpl" ] ] +
-                                           [ pjoin(self.engine_dir, "node_bench_flops"),
-                                             pjoin(comb_dir, "HPL.dat") ]),
-                            remote_location = node_working_dir,
-                            connection_params = execo_g5k.default_oarsh_oarcp_params)])
-                preparation.run()
-                if not preparation.ok:
-                    if preparation.stats()['num_ok'] < comb['num_nodes']:
-                        worker_log("aborting, copy of files failed on too much nodes:\n" + execo.Report([preparation]).to_string())
-                        self.sweeper.cancel(comb)
-                        return
-                nodes = update_nodes(preparation)
-                # run bench
-                worker_log("run bench on nodes")
-                bench = execo.Remote(
-                    "cd %s ; ./node_bench_flops %s %s %s %s > stdout" % (
-                        node_working_dir,
-                        comb["blas"],
-                        comb["num_cores"],
-                        packages["hpl"]["extract_dir"],
-                        " ".join([ prepared_archive(package, comb["cluster"][0])
-                                   for package in [ "atlas", "openmpi", "hpl" ] ])),
+        xhplconf = xhplconf.format(
+            ns = comb["xhpl_n"],
+            nbs = comb["xhpl_nb"],
+            grid_ps = comb["xhpl_grid"][0],
+            grid_qs = comb["xhpl_grid"][1],
+            pfacts = comb["xhpl_pfact"],
+            rfacts = comb["xhpl_rfact"])
+        with open(pjoin(comb_dir,"HPL.dat"), "w") as f:
+            print >> f, xhplconf
+        # prepare nodes
+        worker_log.info("copy files to nodes")
+        preparation = SequentialActions([
+                Remote("mkdir -p " + node_working_dir,
+                       nodes),
+                Put(
                     nodes,
-                    connection_params = execo_g5k.default_oarsh_oarcp_params)
-                bench.run()
-                failed = False
-                if not bench.ok:
-                    if bench.stats()['num_ok'] < comb['num_nodes']:
-                        failed = True
-                        worker_log("bench failed on too much nodes:\n" + execo.Report([bench]).to_string())
-                        self.sweeper.cancel(comb)
-                # retrieve stdout from all node
-                execo.Process("mkdir -p " + " ".join([pjoin(comb_dir, n.address) for n in nodes])).run()
-                worker_log("retrieve logs in %s" % (comb_dir,))
-                retrieval1 = execo.Get(
-                    nodes,
-                    remote_files = [
-                        "%s/%s/bin/Linux_PII_CBLAS/HPL.dat" % (node_working_dir, packages["hpl"]["extract_dir"]),
-                        "%s/stdout" % node_working_dir],
-                    local_location = pjoin(comb_dir, "{{{host}}}"),
-                    connection_params = execo_g5k.default_oarsh_oarcp_params)
-                retrieval1.run()
-                if failed:
-                    worker_log("bench failed - tried to get the logs - aborting")
-                    return
-                # retrieve results
-                nodes = update_nodes(bench)
-                worker_log("retrieve results in %s" % (comb_dir,))
-                retrieval2 = execo.Get(
-                    nodes,
-                    remote_files = [ "%s/%s/bin/Linux_PII_CBLAS/HPL.out" % (node_working_dir, packages["hpl"]["extract_dir"]) ],
-                    local_location = pjoin(comb_dir, "{{{host}}}"),
-                    connection_params = execo_g5k.default_oarsh_oarcp_params)
-                retrieval2.run()
-                if not retrieval2.ok:
-                    if retrieval2.stats()['num_ok'] < comb['num_nodes']:
-                        [ os.unlink(p) for p in find_files(comb_dir, "-name", "HPL.out") ]
-                        worker_log("aborting, results retrieval failed on too much nodes:\n" + execo.Report([retrieval2]).to_string())
-                        self.sweeper.cancel(comb)
-                        return
-                worker_log("finished combination %s" % (comb,))
-                self.sweeper.done(comb)
-        finally:
-            if jobid:
-                worker_log("delete oar job")
-                execo_g5k.oardel([(jobid, site)])
-                jobid = None
-            worker_log("exit")
+                    local_files = ([ pjoin(self.prepare_path, prepared_archive(package, cluster))
+                                     for package in [ "atlas", "openmpi", "hpl" ] ] +
+                                   [ pjoin(self.engine_dir, "node_bench_flops"),
+                                     pjoin(comb_dir, "HPL.dat") ]),
+                    remote_location = node_working_dir)])
+        preparation.run()
+        if not check_enough_nodes(preparation, comb, "aborting, copy of files failed on too much nodes"): return
+        nodes = filter_bad_hosts(preparation, nodes)
+        # run bench
+        worker_log.info("run bench on nodes")
+        bench = Remote(
+            "cd %s ; ./node_bench_flops %s %s %s %s > stdout" % (
+                node_working_dir,
+                comb["blas"],
+                comb["num_cores"],
+                packages["hpl"]["extract_dir"],
+                " ".join([ prepared_archive(package, cluster)
+                           for package in [ "atlas", "openmpi", "hpl" ] ])),
+            nodes)
+        bench.run()
+        success = check_enough_nodes(bench, comb, "bench failed on too much nodes")
+        # retrieve stdout from all node
+        Process("mkdir -p " + " ".join([pjoin(comb_dir, n.address) for n in nodes])).run()
+        worker_log.info("retrieve logs in %s" % (comb_dir,))
+        retrieval1 = Get(
+            nodes,
+            remote_files = [
+                "%s/%s/bin/Linux_PII_CBLAS/HPL.dat" % (node_working_dir, packages["hpl"]["extract_dir"]),
+                "%s/stdout" % node_working_dir],
+            local_location = pjoin(comb_dir, "{{{host}}}"))
+        retrieval1.run()
+        if not success:
+            worker_log.info("bench failed - tried to get the logs - aborting")
+            return
+        # retrieve results
+        nodes = filter_bad_hosts(bench, nodes)
+        worker_log.info("retrieve results in %s" % (comb_dir,))
+        retrieval2 = Get(
+            nodes,
+            remote_files = [ "%s/%s/bin/Linux_PII_CBLAS/HPL.out" % (node_working_dir, packages["hpl"]["extract_dir"]) ],
+            local_location = pjoin(comb_dir, "{{{host}}}"))
+        retrieval2.run()
+        if not check_enough_nodes(retrieval2, comb, "aborting, results retrieval failed on too much nodes"):
+            [ os.unlink(p) for p in find_files(comb_dir, "-name", "HPL.out") ]
+            return
+        worker_log.info("finished combination %s" % (comb,))
+        self.sweeper.done(comb)
+
+if __name__ == "__main__":
+    e = g5k_bench_flops()
+    e.start()
