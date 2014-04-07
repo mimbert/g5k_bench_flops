@@ -95,6 +95,9 @@ class g5k_bench_flops(g5k_cluster_engine):
                     return False
             return True
 
+        if nodes == None:
+            self.sweeper.cancel(comb)
+            return
         comb_dir = pjoin(self.result_dir, slugify(comb))
         try:
             os.makedirs(comb_dir)
