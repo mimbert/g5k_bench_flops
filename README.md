@@ -62,3 +62,13 @@ On a grid5000 frontend or node:
    $ ./g5k_prepare_bench_flops paranoia -ML -o "-q testing" -T
     
    $ ./g5k_bench_flops paranoia -ML -o "-q testing" -T
+
+
+analyzing
+---------
+
+When all cases have been run, use the following script to obtain results:
+
+   $  ./parse_bench_results <run_dir>
+
+and fill the Reference API.
