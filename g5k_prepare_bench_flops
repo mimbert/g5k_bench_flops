@@ -2,7 +2,7 @@
 
 import sys, os
 from execo import Remote, Put, Get, SequentialActions, Report
-from execo_g5k import get_g5k_clusters, get_cluster_site, OarSubmission, g5k_configuration
+from execo_g5k import get_g5k_clusters, get_cluster_site, OarSubmission, g5k_configuration, deploy, Deployment
 from execo_engine import logger, ParamSweeper
 from g5k_cluster_engine import g5k_cluster_engine, worker_log
 from os.path import join as pjoin
@@ -18,6 +18,7 @@ class g5k_prepare_bench_flops(g5k_cluster_engine):
         self.options_parser.set_description("precompile package for benching flops")
         self.options_parser.add_option("-o", dest = "oar_options", help = "oar reservation options", default = None)
         self.options_parser.add_option("-w", dest = "walltime", help = "walltime of compilation jobs", type = "string", default = "8:0:0")
+        self.options_parser.add_option("-D", dest = "deploy_env", help = "environment used to compile packages (DEFAULT=\"\" No deployment)", type = "string", default = "")
         self.options_parser.add_option("-T", dest = "testing", action = "store_true", default = False,
                                        help = "use api branch testing")
         self.options_parser.add_argument("clusters", "comma separated list of clusters. ALL for all clusters")
@@ -56,10 +57,14 @@ class g5k_prepare_bench_flops(g5k_cluster_engine):
         comb = self.sweeper.get_next(filtr = lambda r: filter(lambda comb: comb == cluster, r))
         if not comb:
             return None
+        if self.options.deploy_env == "":
+            job_type = ["allow_classic_ssh"]
+        else:
+            job_type = ["deploy"]
         submission = OarSubmission(resources = "{cluster='%s'}/nodes=1" % (cluster,),
                                    walltime = self.options.walltime,
                                    name = "flopscompilworker",
-                                   job_type = ["allow_classic_ssh"],
+                                   job_type = job_type,
                                    additional_options = self.options.oar_options)
         return submission, comb
 
@@ -70,6 +75,13 @@ class g5k_prepare_bench_flops(g5k_cluster_engine):
             return
 
         def prepare_package(package):
+            if not self.options.deploy_env == "":
+                worker_log.info("deploy compilation environment %s" % self.options.deploy_env)
+                deployed, undeployed = deploy(Deployment(nodes, env_name = self.options.deploy_env))
+                worker_log.info("%i deployed, %i undeployed" % (len(deployed), len(undeployed)))
+                if len(deployed) < 1:
+                    worker_log.error("deployment failed")
+                    return
             worker_log.info("preparing package %s" % package)
             worker_log.info("copy %s files to nodes" % package)
             preparation = SequentialActions(

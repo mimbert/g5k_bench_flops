@@ -3,7 +3,7 @@
 import sys, os, time, math, pprint
 from os.path import join as pjoin
 from execo import Remote, SequentialActions, Put, Get, Report, Process, filter_bad_hosts
-from execo_g5k import get_host_attributes, OarSubmission, g5k_charter_time
+from execo_g5k import get_host_attributes, OarSubmission, g5k_charter_time, config
 from execo_engine import logger, ParamSweeper, sweep, slugify
 from g5k_cluster_engine import g5k_cluster_engine, worker_log
 from common import *
@@ -35,7 +35,7 @@ class g5k_bench_flops(g5k_cluster_engine):
             self.options_parser.print_help(file=sys.stderr)
             exit(1)
         if self.options.testing:
-            g5k_configuration['api_additional_args'].append("branch=testing")
+            config.g5k_configuration['api_additional_args'].append("branch=testing")
         clusters = self.args[0].split(",")
         parameters = {
             "cluster": {},
