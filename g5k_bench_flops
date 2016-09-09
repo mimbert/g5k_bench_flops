@@ -46,7 +46,7 @@ class g5k_bench_flops(g5k_cluster_engine):
             }
         for cluster in clusters:
             attrs = get_host_attributes(cluster + "-1")
-            num_cores = attrs["architecture"]["smt_size"]
+            num_cores = attrs["architecture"]["nb_cores"]
             free_mem = int(min(attrs["main_memory"]["ram_size"] - .3e9, self.options.ramlimit * 1e9))
             big_size = int(math.sqrt(free_mem/8.0)*0.8)
             parameters["cluster"][cluster] = {
