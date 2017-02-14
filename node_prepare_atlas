@@ -48,7 +48,7 @@ mkdir build
 cd build
 myecho "configure atlas"
 POINTER_BITWIDTH=`getconf LONG_BIT`
-../configure --prefix=$WORKDIR/atlas-install --nof77 -t 0 -b "$POINTER_BITWIDTH"
+../configure --prefix=$WORKDIR/atlas-install --nof77 -t 0 -b "$POINTER_BITWIDTH" --cripple-atlas-performance
 myecho "make atlas"
 make
 
