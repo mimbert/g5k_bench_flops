@@ -33,7 +33,7 @@ tar xjf "$SOURCEARCHIVE"
 
 myecho "configure openmpi"
 cd "$WORKDIR/$EXTRACTDIR"
-./configure --prefix=$WORKDIR/openmpi-install --enable-branch-probabilities --with-memory-manager=none
+./configure --prefix=$WORKDIR/openmpi-install --enable-branch-probabilities --with-memory-manager=none --disable-vt
 myecho "make openmpi"
 make
 
