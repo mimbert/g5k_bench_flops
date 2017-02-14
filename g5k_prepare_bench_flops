@@ -30,7 +30,7 @@ class g5k_prepare_bench_flops(g5k_cluster_engine):
             self.args_parser.print_help(file=sys.stderr)
             exit(1)
         if self.args.testing:
-            g5k_configuration['api_additional_args'].append("branch=testing")
+            g5k_configuration['api_additional_args']['branch'] = "testing"
         try:
             os.makedirs(self.prepare_path)
         except:

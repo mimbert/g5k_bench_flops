@@ -35,7 +35,7 @@ class g5k_bench_flops(g5k_cluster_engine):
             self.args_parser.print_help(file=sys.stderr)
             exit(1)
         if self.args.testing:
-            config.g5k_configuration['api_additional_args'].append("branch=testing")
+            config.g5k_configuration['api_additional_args']['branch'] = "testing"
         clusters = self.args.clusters.split(",")
         parameters = {
             "cluster": {},
