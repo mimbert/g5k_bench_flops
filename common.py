@@ -2,8 +2,8 @@ import subprocess, pipes
 
 packages = {
     "atlas": {
-        "version": "3.10.0",
-        "archive": "atlas3.10.0.tar.bz2",
+        "version": "3.10.3",
+        "archive": "atlas3.10.3.tar.bz2",
         "extract_dir": "ATLAS",
         "deps": []
         },
