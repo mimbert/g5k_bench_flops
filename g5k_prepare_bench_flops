@@ -14,28 +14,28 @@ class g5k_prepare_bench_flops(g5k_cluster_engine):
 
     def __init__(self):
         super(g5k_prepare_bench_flops, self).__init__()
-        self.options_parser.set_usage("usage: %prog <comma separated list of clusters>")
-        self.options_parser.set_description("precompile package for benching flops")
-        self.options_parser.add_option("-o", dest = "oar_options", help = "oar reservation options", default = None)
-        self.options_parser.add_option("-w", dest = "walltime", help = "walltime of compilation jobs", type = "string", default = "8:0:0")
-        self.options_parser.add_option("-D", dest = "deploy_env", help = "environment used to compile packages (DEFAULT=\"\" No deployment)", type = "string", default = "")
-        self.options_parser.add_option("-T", dest = "testing", action = "store_true", default = False,
+        self.args_parser.usage = "usage: %(prog)s <comma separated list of clusters>"
+        self.args_parser.description = "precompile package for benching flops"
+        self.args_parser.add_argument("-o", dest = "oar_options", help = "oar reservation options", default = None)
+        self.args_parser.add_argument("-w", dest = "walltime", help = "walltime of compilation jobs", type = str, default = "8:0:0")
+        self.args_parser.add_argument("-D", dest = "deploy_env", help = "environment used to compile packages (DEFAULT=\"\" No deployment)", type = str, default = "")
+        self.args_parser.add_argument("-T", dest = "testing", action = "store_true", default = False,
                                        help = "use api branch testing")
-        self.options_parser.add_argument("clusters", "comma separated list of clusters. ALL for all clusters")
+        self.args_parser.add_argument("clusters", help = "comma separated list of clusters. ALL for all clusters")
         self.prepare_path = pjoin(self.engine_dir, "preparation")
 
     def init(self):
-        if len(self.args) != 1:
-            print "ERROR: missing argument"
-            self.options_parser.print_help(file=sys.stderr)
+        if not vars(self.args):
+            print("ERROR: missing argument")
+            self.args_parser.print_help(file=sys.stderr)
             exit(1)
-        if self.options.testing:
-            g5k_configuration['api_additional_args'].append("branch=testing")
+        if self.args.testing:
+            g5k_configuration['api_additional_args']['branch'] = "testing"
         try:
             os.makedirs(self.prepare_path)
         except:
             pass
-        clusters = set(self.args[0].split(","))
+        clusters = set(self.args.clusters.split(","))
         if "ALL" in clusters:
             clusters.remove("ALL")
             clusters.update(get_g5k_clusters())
@@ -57,15 +57,15 @@ class g5k_prepare_bench_flops(g5k_cluster_engine):
         comb = self.sweeper.get_next(filtr = lambda r: filter(lambda comb: comb == cluster, r))
         if not comb:
             return None
-        if self.options.deploy_env == "":
+        if self.args.deploy_env == "":
             job_type = ["allow_classic_ssh"]
         else:
             job_type = ["deploy"]
         submission = OarSubmission(resources = "{cluster='%s'}/nodes=1" % (cluster,),
-                                   walltime = self.options.walltime,
+                                   walltime = self.args.walltime,
                                    name = "flopscompilworker",
                                    job_type = job_type,
-                                   additional_options = self.options.oar_options)
+                                   additional_options = self.args.oar_options)
         return submission, comb
 
     def worker(self, cluster, site, comb, nodes, worker_index, oarsubmission, jobid):
@@ -75,9 +75,9 @@ class g5k_prepare_bench_flops(g5k_cluster_engine):
             return
 
         def prepare_package(package):
-            if not self.options.deploy_env == "":
-                worker_log.info("deploy compilation environment %s" % self.options.deploy_env)
-                deployed, undeployed = deploy(Deployment(nodes, env_name = self.options.deploy_env))
+            if not self.args.deploy_env == "":
+                worker_log.info("deploy compilation environment %s" % self.args.deploy_env)
+                deployed, undeployed = deploy(Deployment(nodes, env_name = self.args.deploy_env))
                 worker_log.info("%i deployed, %i undeployed" % (len(deployed), len(undeployed)))
                 if len(deployed) < 1:
                     worker_log.error("deployment failed")
