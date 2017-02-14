@@ -12,42 +12,42 @@ class g5k_bench_flops(g5k_cluster_engine):
 
     def __init__(self):
         super(g5k_bench_flops, self).__init__()
-        self.options_parser.set_usage("usage: %prog <comma separated list of clusters>")
-        self.options_parser.set_description("compile and install openmpi, atlas, xhpl, then run xhpl bench to get max flops for cluster nodes")
-        self.options_parser.add_option("-o", dest = "oar_options", default = None,
+        self.args_parser.usage = "usage: %(prog)s <comma separated list of clusters>"
+        self.args_parser.description = "compile and install openmpi, atlas, xhpl, then run xhpl bench to get max flops for cluster nodes"
+        self.args_parser.add_argument("-o", dest = "oar_options", default = None,
                                        help = "oar reservation options")
-        self.options_parser.add_option("-w", dest = "walltime", default = "5:0:0",
-                                       help = "walltime of bench jobs", type = "string")
-        self.options_parser.add_option("-n", dest = "num_replicas", type = "int", default = 5,
+        self.args_parser.add_argument("-w", dest = "walltime", default = "5:0:0",
+                                       help = "walltime of bench jobs", type = str)
+        self.args_parser.add_argument("-n", dest = "num_replicas", type = int, default = 5,
                                        help = "num xp replicas: how many repetition of bench runs")
-        self.options_parser.add_option("-C", dest = "charter", action = "store_true", default = False,
+        self.args_parser.add_argument("-C", dest = "charter", action = "store_true", default = False,
                                        help = "activate submission of best-effort jobs during time periods where g5k charter is applicable")
-        self.options_parser.add_option("-T", dest = "testing", action = "store_true", default = False,
+        self.args_parser.add_argument("-T", dest = "testing", action = "store_true", default = False,
                                        help = "use api branch testing (conflicts with option -C)")
-        self.options_parser.add_option("-m", dest = "ramlimit", type = "int", default = 16,
+        self.args_parser.add_argument("-m", dest = "ramlimit", type = int, default = 16,
                                        help = "ram limit in GB (to avoid bench taking too much time)")
-        self.options_parser.add_argument("clusters", "comma separated list of clusters")
+        self.args_parser.add_argument("clusters", help="comma separated list of clusters")
         self.prepare_path = pjoin(self.engine_dir, "preparation")
 
     def init(self):
-        if len(self.args) != 1:
-            print "ERROR: wrong number of arguments"
-            self.options_parser.print_help(file=sys.stderr)
+        if not vars(self.args):
+            print("ERROR: wrong number of arguments")
+            self.args_parser.print_help(file=sys.stderr)
             exit(1)
-        if self.options.testing:
+        if self.args.testing:
             config.g5k_configuration['api_additional_args'].append("branch=testing")
-        clusters = self.args[0].split(",")
+        clusters = self.args.clusters.split(",")
         parameters = {
             "cluster": {},
             "blas": ["atlas"],
             "num_nodes": [1],
             "xhpl_nb": [ 64, 128, 256 ],
-            "repl": range(0, self.options.num_replicas)
+            "repl": range(0, self.args.num_replicas)
             }
         for cluster in clusters:
             attrs = get_host_attributes(cluster + "-1")
             num_cores = attrs["architecture"]["nb_cores"]
-            free_mem = int(min(attrs["main_memory"]["ram_size"] - .3e9, self.options.ramlimit * 1e9))
+            free_mem = int(min(attrs["main_memory"]["ram_size"] - .3e9, self.args.ramlimit * 1e9))
             big_size = int(math.sqrt(free_mem/8.0)*0.8)
             parameters["cluster"][cluster] = {
                 "num_cores": {
@@ -77,11 +77,11 @@ class g5k_bench_flops(g5k_cluster_engine):
         if not comb:
             return None
         submission = OarSubmission(resources = "{cluster='%s'}/nodes=%i" % (cluster, comb['num_nodes']),
-                                   walltime = self.options.walltime,
+                                   walltime = self.args.walltime,
                                    name = "flopsworker",
                                    job_type = ["allow_classic_ssh"],
-                                   additional_options = self.options.oar_options)
-        if self.options.charter and g5k_charter_time(time.time()):
+                                   additional_options = self.args.oar_options)
+        if self.args.charter and g5k_charter_time(time.time()):
             submission.job_type.append("besteffort")
         return submission, comb
 
